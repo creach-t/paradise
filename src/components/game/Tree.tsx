@@ -1,38 +1,47 @@
-import React, { useCallback } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Animated } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { TreeNode } from '../../types';
-import { useGameStore } from '../../store/gameStore';
+import { usePlayerStore } from '../../store/playerStore';
 
 interface TreeProps {
   tree: TreeNode;
+  /** Surbrillance — vrai si ce nœud est la cible d'interaction courante. */
+  isHighlighted?: boolean;
 }
 
 /**
- * Arbre récoltable. Tap → +1 bois, passe en état récolté (semi-transparent).
- * Se ré-affiche quand le store notifie isHarvested = false.
- * Prêt pour : animations (scale bounce, feuilles qui tombent), niveaux d'arbre, outils.
+ * Arbre récoltable — composant d'affichage pur (aucun TouchableOpacity).
+ * La récolte est déclenchée par ActionButton quand le joueur est à portée.
+ *
+ * ─── États visuels ────────────────────────────────────────────────────────────
+ *  🌲 Normal       — disponible
+ *  🌲🪓 Verrouillé  — hache manquante → badge indicateur
+ *  🌲✨ En surbrillance — joueur à portée, sélectionné par useNearestHarvestable
+ *  🪵  Récolté      — en attente de respawn (très transparent)
  */
-export const Tree: React.FC<TreeProps> = ({ tree }) => {
-  const harvestTree = useGameStore((s) => s.harvestTree);
-
-  const handlePress = useCallback(() => {
-    harvestTree(tree.id);
-  }, [tree.id, harvestTree]);
+export const Tree: React.FC<TreeProps> = ({ tree, isHighlighted = false }) => {
+  const equippedTool = usePlayerStore((s) => s.equippedTool);
+  const showLockBadge = !tree.isHarvested && equippedTool !== 'wooden_axe';
 
   return (
-    <TouchableOpacity
+    <View
       style={[
         styles.container,
         { left: tree.x, top: tree.y },
         tree.isHarvested && styles.harvested,
+        isHighlighted && styles.highlighted,
       ]}
-      onPress={handlePress}
-      activeOpacity={0.6}
-      disabled={tree.isHarvested}
-      accessibilityLabel={tree.isHarvested ? 'Arbre récolté' : 'Arbre — Tap pour récolter'}
+      pointerEvents="none"
     >
       <Text style={styles.emoji}>{tree.isHarvested ? '🪵' : '🌲'}</Text>
-    </TouchableOpacity>
+
+      {/* Badge "outil requis" — visible seulement si pas encore équipé */}
+      {showLockBadge && (
+        <View style={styles.lockBadge}>
+          <Text style={styles.lockText}>🪓</Text>
+        </View>
+      )}
+    </View>
   );
 };
 
@@ -46,12 +55,27 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 38,
-    // Légère ombre pour décoller l'objet du sol.
     textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 1, height: 2 },
     textShadowRadius: 3,
   },
   harvested: {
-    opacity: 0.35,
+    opacity: 0.28,
+  },
+  highlighted: {
+    borderRadius: 26,
+    backgroundColor: 'rgba(126,200,80,0.22)',
+  },
+  lockBadge: {
+    position: 'absolute',
+    bottom: 1,
+    right: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 7,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+  },
+  lockText: {
+    fontSize: 10,
   },
 });

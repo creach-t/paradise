@@ -2,50 +2,76 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ResourceInventory, TreeNode, RockNode, ResourceType } from '../types';
-import { INITIAL_TREES, INITIAL_ROCKS, GAME_CONFIG } from '../constants/gameConfig';
+import {
+  ResourceInventory,
+  ToolInventory,
+  TreeNode,
+  RockNode,
+  TwigNode,
+  PebbleNode,
+  ResourceType,
+  CraftRecipe,
+} from '../types';
+import {
+  INITIAL_TREES,
+  INITIAL_ROCKS,
+  INITIAL_TWIGS,
+  INITIAL_PEBBLES,
+  GAME_CONFIG,
+} from '../constants/gameConfig';
 import { CRAFT_RECIPES } from '../constants/craftRecipes';
 
-// ─── Types du store ───────────────────────────────────────────────────────────
+// ─── Types du store ────────────────────────────────────────────────────────────
 
 interface GameState {
   resources: ResourceInventory;
+  /** Outils fabriqués (nombre d'exemplaires de chaque type). */
+  tools: ToolInventory;
   trees: TreeNode[];
   rocks: RockNode[];
+  twigs: TwigNode[];
+  pebbles: PebbleNode[];
 }
 
 interface GameActions {
-  /** Récolte un arbre : ajoute du bois, marque l'arbre comme récolté. */
+  /** Récolte un arbre — requiert la hache en bois équipée. Coûte HARVEST_ENERGY_TOOL. */
   harvestTree: (id: string) => void;
-  /** Récolte un rocher : ajoute de la pierre, marque le rocher comme récolté. */
+  /** Récolte un rocher — requiert la pioche en pierre équipée. Coûte HARVEST_ENERGY_TOOL. */
   harvestRock: (id: string) => void;
-  /** Fait réapparaître un arbre (appelé par useRespawn). */
+  /** Récolte un buisson de brindilles (à la main). Coûte HARVEST_ENERGY_HAND. */
+  harvestTwig: (id: string) => void;
+  /** Récolte un tas de galets (à la main). Coûte HARVEST_ENERGY_HAND. */
+  harvestPebble: (id: string) => void;
+
   respawnTree: (id: string) => void;
-  /** Fait réapparaître un rocher (appelé par useRespawn). */
   respawnRock: (id: string) => void;
+  respawnTwig: (id: string) => void;
+  respawnPebble: (id: string) => void;
+
   /**
-   * Tente de crafter une recette.
-   * @returns true si succès, false si ressources insuffisantes.
+   * Tente de crafter une recette (outil ou ressource).
+   * @returns 'success' | 'no_resources' | 'unknown'
    */
-  craft: (recipeId: string) => boolean;
-  /** Utilitaire : ajoute directement une quantité à une ressource. */
+  craft: (recipeId: string) => 'success' | 'no_resources' | 'unknown';
+
   addResource: (resource: ResourceType, amount: number) => void;
-  /** Réinitialise complètement la partie. */
   resetGame: () => void;
 }
 
 export type GameStore = GameState & GameActions;
 
-// ─── Valeurs initiales ────────────────────────────────────────────────────────
+// ─── État initial ──────────────────────────────────────────────────────────────
 
 const initialResources: ResourceInventory = {
+  branch: 0,
+  pebble: 0,
   wood: 0,
   stone: 0,
   plank: 0,
   brick: 0,
 };
 
-/** Transforme une config statique en nœud de jeu avec l'état initial. */
+/** Transforme une config statique en nœud de jeu avec l'état de départ. */
 const buildNodes = <T extends { id: string; x: number; y: number; type: string }>(
   configs: T[],
 ): Array<T & { isHarvested: false; respawnAt: null }> =>
@@ -53,20 +79,60 @@ const buildNodes = <T extends { id: string; x: number; y: number; type: string }
 
 const initialState: GameState = {
   resources: initialResources,
-  trees: buildNodes(INITIAL_TREES) as TreeNode[],
-  rocks: buildNodes(INITIAL_ROCKS) as RockNode[],
+  tools: {},
+  trees:   buildNodes(INITIAL_TREES)   as TreeNode[],
+  rocks:   buildNodes(INITIAL_ROCKS)   as RockNode[],
+  twigs:   buildNodes(INITIAL_TWIGS)   as TwigNode[],
+  pebbles: buildNodes(INITIAL_PEBBLES) as PebbleNode[],
 };
 
-// ─── Store Zustand ────────────────────────────────────────────────────────────
+// ─── Helpers inter-stores ──────────────────────────────────────────────────────
+//
+// Require dynamique pour éviter le cycle d'import circulaire gameStore ↔ playerStore.
+
+/**
+ * Lit l'outil équipé depuis playerStore via getState().
+ */
+function getEquippedTool(): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { usePlayerStore } = require('./playerStore') as typeof import('./playerStore');
+  return usePlayerStore.getState().equippedTool;
+}
+
+/**
+ * Consomme de l'énergie du joueur.
+ * @returns false si l'énergie est insuffisante (bloquer la récolte).
+ */
+function consumePlayerEnergy(amount: number): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { usePlayerStore } = require('./playerStore') as typeof import('./playerStore');
+  return usePlayerStore.getState().consumeEnergy(amount);
+}
+
+// ─── Helpers craft ─────────────────────────────────────────────────────────────
+
+function canAfford(
+  resources: ResourceInventory,
+  requirements: Partial<ResourceInventory>,
+): boolean {
+  return (Object.entries(requirements) as [keyof ResourceInventory, number][])
+    .every(([res, amt]) => resources[res] >= amt);
+}
+
+// ─── Store ─────────────────────────────────────────────────────────────────────
 
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
       ...initialState,
 
+      // ── Récolte arbres ────────────────────────────────────────────────────
+
       harvestTree: (id) => {
         const tree = get().trees.find((t) => t.id === id);
         if (!tree || tree.isHarvested) return;
+        if (getEquippedTool() !== 'wooden_axe') return;           // outil requis
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_TOOL)) return; // énergie insuffisante
 
         set((state) => ({
           resources: {
@@ -81,9 +147,13 @@ export const useGameStore = create<GameStore>()(
         }));
       },
 
+      // ── Récolte rochers ───────────────────────────────────────────────────
+
       harvestRock: (id) => {
         const rock = get().rocks.find((r) => r.id === id);
         if (!rock || rock.isHarvested) return;
+        if (getEquippedTool() !== 'stone_pickaxe') return;        // outil requis
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_TOOL)) return; // énergie insuffisante
 
         set((state) => ({
           resources: {
@@ -98,66 +168,122 @@ export const useGameStore = create<GameStore>()(
         }));
       },
 
-      respawnTree: (id) => {
+      // ── Récolte buissons (main libre) ─────────────────────────────────────
+
+      harvestTwig: (id) => {
+        const twig = get().twigs.find((t) => t.id === id);
+        if (!twig || twig.isHarvested) return;
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_HAND)) return; // énergie insuffisante
+
         set((state) => ({
-          trees: state.trees.map((t) =>
-            t.id === id ? { ...t, isHarvested: false, respawnAt: null } : t,
+          resources: {
+            ...state.resources,
+            branch: state.resources.branch + GAME_CONFIG.BRANCH_PER_TAP,
+          },
+          twigs: state.twigs.map((t) =>
+            t.id === id
+              ? { ...t, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.TWIG_RESPAWN_DELAY }
+              : t,
           ),
         }));
       },
 
-      respawnRock: (id) => {
+      // ── Récolte galets (main libre) ───────────────────────────────────────
+
+      harvestPebble: (id) => {
+        const pbl = get().pebbles.find((p) => p.id === id);
+        if (!pbl || pbl.isHarvested) return;
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_HAND)) return; // énergie insuffisante
+
         set((state) => ({
-          rocks: state.rocks.map((r) =>
-            r.id === id ? { ...r, isHarvested: false, respawnAt: null } : r,
+          resources: {
+            ...state.resources,
+            pebble: state.resources.pebble + GAME_CONFIG.PEBBLE_PER_TAP,
+          },
+          pebbles: state.pebbles.map((p) =>
+            p.id === id
+              ? { ...p, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.PEBBLE_RESPAWN_DELAY }
+              : p,
           ),
         }));
       },
+
+      // ── Respawns ──────────────────────────────────────────────────────────
+
+      respawnTree: (id) =>
+        set((s) => ({ trees: s.trees.map((t) => t.id === id ? { ...t, isHarvested: false, respawnAt: null } : t) })),
+
+      respawnRock: (id) =>
+        set((s) => ({ rocks: s.rocks.map((r) => r.id === id ? { ...r, isHarvested: false, respawnAt: null } : r) })),
+
+      respawnTwig: (id) =>
+        set((s) => ({ twigs: s.twigs.map((t) => t.id === id ? { ...t, isHarvested: false, respawnAt: null } : t) })),
+
+      respawnPebble: (id) =>
+        set((s) => ({ pebbles: s.pebbles.map((p) => p.id === id ? { ...p, isHarvested: false, respawnAt: null } : p) })),
+
+      // ── Craft ─────────────────────────────────────────────────────────────
 
       craft: (recipeId) => {
-        const recipe = CRAFT_RECIPES.find((r) => r.id === recipeId);
-        if (!recipe) return false;
+        const recipe = CRAFT_RECIPES.find((r) => r.id === recipeId) as CraftRecipe | undefined;
+        if (!recipe) return 'unknown';
 
         const { resources } = get();
-
-        // Vérifie que chaque ressource requise est disponible en quantité suffisante.
-        const canCraft = (Object.entries(recipe.requirements) as [keyof ResourceInventory, number][])
-          .every(([resource, amount]) => resources[resource] >= amount);
-
-        if (!canCraft) return false;
+        if (!canAfford(resources, recipe.requirements)) return 'no_resources';
 
         set((state) => {
-          const next = { ...state.resources };
-
-          // Consomme les ressources requises.
+          const nextResources = { ...state.resources };
+          // Consomme les ingrédients.
           (Object.entries(recipe.requirements) as [keyof ResourceInventory, number][])
-            .forEach(([resource, amount]) => {
-              next[resource] -= amount;
-            });
+            .forEach(([res, amt]) => { nextResources[res] -= amt; });
 
-          // Ajoute la production.
-          next[recipe.output] += recipe.outputAmount;
-
-          return { resources: next };
+          if (recipe.category === 'tool') {
+            // Ajoute l'outil à l'inventaire d'outils.
+            const nextTools = { ...state.tools };
+            nextTools[recipe.output] = (nextTools[recipe.output] ?? 0) + 1;
+            return { resources: nextResources, tools: nextTools };
+          } else {
+            nextResources[recipe.output] += recipe.outputAmount;
+            return { resources: nextResources };
+          }
         });
 
-        return true;
+        return 'success';
       },
 
-      addResource: (resource, amount) => {
+      // ── Utilitaires ───────────────────────────────────────────────────────
+
+      addResource: (resource, amount) =>
         set((state) => ({
           resources: {
             ...state.resources,
             [resource]: state.resources[resource] + amount,
           },
-        }));
-      },
+        })),
 
       resetGame: () => set(initialState),
     }),
     {
       name: 'paradise-save',
       storage: createJSONStorage(() => AsyncStorage),
+
+      // ── Merge personnalisé ────────────────────────────────────────────────
+      // Garantit que les nouvelles clés de ResourceInventory (branch, pebble…)
+      // reçoivent leur valeur par défaut même sur des sauvegardes anciennes qui
+      // ne les contiennent pas. Sans ce merge, les nouvelles clés seraient
+      // `undefined` après réhydratation → NaN au premier harvest.
+      merge: (persistedState: unknown, currentState: GameStore): GameStore => {
+        const ps = persistedState as Partial<GameState>;
+        return {
+          ...currentState,
+          ...ps,
+          // Deep merge sur resources : les clés manquantes tombent sur 0.
+          resources: {
+            ...currentState.resources,   // toutes les clés à 0 par défaut
+            ...(ps.resources ?? {}),     // valeurs persistées écrasent si présentes
+          },
+        };
+      },
     },
   ),
 );

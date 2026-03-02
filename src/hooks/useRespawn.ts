@@ -4,32 +4,47 @@ import { GAME_CONFIG } from '../constants/gameConfig';
 
 /**
  * Hook de gestion des respawns.
- * Tick à intervalle régulier et déclenche le respawn de tout nœud
- * dont le timer est expiré. À monter une seule fois dans GameScene.
+ *
+ * ─── Fix performance ───────────────────────────────────────────────────────
+ * Ancienne version : dépendances [trees, rocks, ...] → l'interval était
+ * recréé à chaque récolte (chaque tap déclenchait clearInterval + setInterval).
+ * Nouvelle version : getState() lit l'état Zustand courant SANS s'abonner,
+ * ce qui permet un tableau de dépendances vide = un seul interval stable.
+ * ─────────────────────────────────────────────────────────────────────────
+ *
+ * À monter une seule fois dans GameScene.
  */
 export function useRespawn(): void {
-  const trees = useGameStore((s) => s.trees);
-  const rocks = useGameStore((s) => s.rocks);
-  const respawnTree = useGameStore((s) => s.respawnTree);
-  const respawnRock = useGameStore((s) => s.respawnRock);
-
   useEffect(() => {
     const interval = setInterval(() => {
+      const {
+        trees, rocks, twigs, pebbles,
+        respawnTree, respawnRock, respawnTwig, respawnPebble,
+      } = useGameStore.getState();
       const now = Date.now();
 
-      trees.forEach((tree) => {
+      for (const tree of trees) {
         if (tree.isHarvested && tree.respawnAt !== null && now >= tree.respawnAt) {
           respawnTree(tree.id);
         }
-      });
-
-      rocks.forEach((rock) => {
+      }
+      for (const rock of rocks) {
         if (rock.isHarvested && rock.respawnAt !== null && now >= rock.respawnAt) {
           respawnRock(rock.id);
         }
-      });
+      }
+      for (const twig of twigs) {
+        if (twig.isHarvested && twig.respawnAt !== null && now >= twig.respawnAt) {
+          respawnTwig(twig.id);
+        }
+      }
+      for (const pbl of pebbles) {
+        if (pbl.isHarvested && pbl.respawnAt !== null && now >= pbl.respawnAt) {
+          respawnPebble(pbl.id);
+        }
+      }
     }, GAME_CONFIG.RESPAWN_TICK);
 
     return () => clearInterval(interval);
-  }, [trees, rocks, respawnTree, respawnRock]);
+  }, []); // Stable : getState() lit toujours l'état courant sans s'abonner
 }
