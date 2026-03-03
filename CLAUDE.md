@@ -2,6 +2,10 @@
 
 Ce fichier donne à Claude le contexte nécessaire pour contribuer efficacement au projet.
 
+## Vision du jeu
+
+**Paradise est un jeu de farming/récolte** (pas de combat, pas de survie hardcore). Le joueur se déplace dans un monde ouvert, récolte des ressources, craft des outils et des matériaux de plus en plus élaborés. La progression est portée par l'**arbre de craft** (plus de recettes = accès à plus de zones et de ressources).
+
 ## Stack
 
 - **Expo SDK 55** (managed workflow) — React Native 0.83.2 — React 19.2
@@ -19,7 +23,7 @@ Deux stores séparés, tous deux persistés :
 | `gameStore.ts` | `paradise-save` | Ressources, outils craftés, état du monde (arbres, rochers, buissons, galets) |
 | `playerStore.ts` | `paradise-player` | Position joueur, stats (énergie, niveau, XP), outil équipé |
 
-**Import circulaire gameStore ↔ playerStore** : résolu par `require()` dynamique dans les helpers `getEquippedTool()` et `consumePlayerEnergy()` — ne jamais faire d'import statique entre ces deux fichiers.
+**Import circulaire gameStore ↔ playerStore** : résolu par `require()` dynamique dans les helpers `getEquippedTool()`, `consumePlayerEnergy()` et `addPlayerXp()` — ne jamais faire d'import statique entre ces deux fichiers.
 
 ## Système d'interaction par proximité
 
@@ -45,14 +49,16 @@ useEffect(() => {
 ```
 Appliqué dans : `useRespawn`, `usePlayerMovement`, `useNearestHarvestable`.
 
-### Récolte + énergie
+### Récolte + énergie + XP
 Chaque action `harvest` du gameStore :
 1. Vérifie que le nœud n'est pas déjà récolté
 2. Vérifie l'outil équipé (arbres/rochers)
 3. Appelle `consumePlayerEnergy(cost)` → retourne `false` si insuffisant → bloque la récolte
 4. Applique le harvest + démarre le timer de respawn
+5. Appelle `addPlayerXp(amount)` → level-up automatique si seuil atteint
 
-Coûts : `HARVEST_ENERGY_HAND = 1` (brindilles, galets) · `HARVEST_ENERGY_TOOL = 2` (arbres, rochers)
+Coûts énergie : `HARVEST_ENERGY_HAND = 1` (brindilles, galets) · `HARVEST_ENERGY_TOOL = 2` (arbres, rochers)
+XP : `XP_TWIG = 5` · `XP_PEBBLE = 5` · `XP_TREE = 15` · `XP_ROCK = 15`
 
 ### Persist — migration des sauvegardes
 Le store `gameStore` utilise un `merge` personnalisé pour éviter le bug `NaN` :
@@ -90,8 +96,9 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 ### Ajouter une ressource
 1. Ajouter la clé dans `ResourceInventory` (`types/index.ts`)
 2. Initialiser à `0` dans `initialResources` (`gameStore.ts`)
-3. Ajouter l'emoji dans `HUD.tsx` et `CraftScreen.tsx`
-4. ✅ Le `merge` du persist gère la compatibilité des sauvegardes existantes
+3. Ajouter les métadonnées dans `RESOURCE_META` (`InventoryScreen.tsx`)
+4. Ajouter l'emoji dans `HUD.tsx`
+5. ✅ Le `merge` du persist gère la compatibilité des sauvegardes existantes
 
 ### Ajouter une recette de craft
 - Ajouter un objet dans `CRAFT_RECIPES` (`constants/craftRecipes.ts`) — c'est tout.
@@ -100,11 +107,42 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 1. Créer le type dans `types/index.ts` (étend `HarvestableNode`)
 2. Ajouter les positions initiales dans `gameConfig.ts`
 3. Créer le composant dans `components/game/` — **`View` pur**, prop `isHighlighted`
-4. Ajouter les actions `harvest` + `respawn` dans `gameStore.ts` (avec `consumePlayerEnergy`)
+4. Ajouter les actions `harvest` + `respawn` dans `gameStore.ts` (avec `consumePlayerEnergy` + `addPlayerXp`)
 5. Enregistrer la demi-taille dans `SPRITE_HALF` (`useNearestHarvestable.ts`)
 6. Appeler `scan(gs.newNodes, 'new_type', requiredTool)` dans le hook
 7. Ajouter l'emoji + label dans `ActionButton.tsx`
 8. Monter le composant dans `GameScene.tsx` avec `isHighlighted={target?.id === node.id}`
+
+## Roadmap farming (par milestone)
+
+### M1 — Fondations manquantes
+- [ ] Monde scrollable — caméra suit le joueur (offset absolu ou ScrollView)
+- [ ] Cycle jour/nuit — timer + assombrissement de la scène (rythme farming, pas danger)
+- [ ] Paramètres — son, reset save (SettingsScreen)
+
+### M2 — Farming core
+- [ ] Potager — planter des graines → croissance (timer) → récolter (nouveau type de nœud)
+- [ ] Nouvelles cultures — baies, céréales, champignons (ressources consommables)
+- [ ] Arrosage — eau comme ressource, arroser accélère la pousse
+- [ ] Compost / engrais — crafter à partir de ressources organiques
+
+### M3 — Construction de base
+- [ ] Maison évolutive — visuel change selon les ressources investies (bois → pierre → brique)
+- [ ] Stockage étendu — coffre, grenier (augmente la capacité max de ressources)
+- [ ] Atelier amélioré — forge débloque les recettes métal
+
+### M4 — Progression craft
+- [ ] Dégradation des outils — durabilité + réparation obligatoire
+- [ ] Arbre de craft étendu — minerai → métal → outils métal → ressources rares
+- [ ] Cuisine — feu de camp, recettes de transformation (fruit → jus, blé → farine → pain)
+- [ ] Déblocage de recettes par niveau
+
+### M5 — Monde & ambiance
+- [ ] Zones débloquées progressivement — craft d'un item spécial = accès zone suivante
+- [ ] Météo — pluie (+croissance cultures), sécheresse (-croissance), tempête
+- [ ] Saisons — ressources différentes selon la saison (printemps/été/automne/hiver)
+- [ ] Sons & musique — ambiance farming, effets de récolte
+- [ ] Monstres rares — spawn nocturne uniquement, passifs si non provoqués
 
 ## Points d'attention
 
@@ -114,6 +152,7 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 - Le projet tourne sur **Expo Go 55.x** — les modules natifs custom nécessitent un dev build
 - Node.js >= 20.19.4 requis (SDK 55 / metro 0.83)
 - `useWindowDimensions()` dans GameScene (pas `Dimensions.get` au module level)
+- `SPAWN_X/Y` dans `playerStore.ts` est calculé au module level avec `Dimensions.get()` — OK en portrait fixe, à corriger si orientation libre
 
 ## Commandes utiles
 

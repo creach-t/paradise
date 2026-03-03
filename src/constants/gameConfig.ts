@@ -29,6 +29,16 @@ export const GAME_CONFIG = {
   HARVEST_ENERGY_HAND: 1,
   /** Énergie consommée pour récolter avec un outil (arbres, rochers). */
   HARVEST_ENERGY_TOOL: 2,
+
+  // ── XP par récolte ────────────────────────────────────────────────────────
+  /** XP gagnée en récoltant un buisson de brindilles. */
+  XP_TWIG: 5,
+  /** XP gagnée en récoltant un tas de galets. */
+  XP_PEBBLE: 5,
+  /** XP gagnée en coupant un arbre. */
+  XP_TREE: 15,
+  /** XP gagnée en minant un rocher. */
+  XP_ROCK: 15,
 } as const;
 
 // ─── Disposition initiale du monde ────────────────────────────────────────────

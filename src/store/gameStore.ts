@@ -109,6 +109,15 @@ function consumePlayerEnergy(amount: number): boolean {
   return usePlayerStore.getState().consumeEnergy(amount);
 }
 
+/**
+ * Ajoute de l'XP au joueur (gère le level-up automatiquement).
+ */
+function addPlayerXp(amount: number): void {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { usePlayerStore } = require('./playerStore') as typeof import('./playerStore');
+  usePlayerStore.getState().addXp(amount);
+}
+
 // ─── Helpers craft ─────────────────────────────────────────────────────────────
 
 function canAfford(
@@ -145,6 +154,7 @@ export const useGameStore = create<GameStore>()(
               : t,
           ),
         }));
+        addPlayerXp(GAME_CONFIG.XP_TREE);
       },
 
       // ── Récolte rochers ───────────────────────────────────────────────────
@@ -166,6 +176,7 @@ export const useGameStore = create<GameStore>()(
               : r,
           ),
         }));
+        addPlayerXp(GAME_CONFIG.XP_ROCK);
       },
 
       // ── Récolte buissons (main libre) ─────────────────────────────────────
@@ -186,6 +197,7 @@ export const useGameStore = create<GameStore>()(
               : t,
           ),
         }));
+        addPlayerXp(GAME_CONFIG.XP_TWIG);
       },
 
       // ── Récolte galets (main libre) ───────────────────────────────────────
@@ -206,6 +218,7 @@ export const useGameStore = create<GameStore>()(
               : p,
           ),
         }));
+        addPlayerXp(GAME_CONFIG.XP_PEBBLE);
       },
 
       // ── Respawns ──────────────────────────────────────────────────────────

@@ -22,22 +22,34 @@ interface ResourceMeta {
 }
 
 const RESOURCE_META: Record<keyof ResourceInventory, ResourceMeta> = {
+  branch: {
+    emoji: '🌿',
+    label: 'Brindille',
+    description: 'Récoltée à la main près des buissons. Sert à crafter la hache.',
+    color: '#4a8a3c',
+  },
+  pebble: {
+    emoji: '⚫',
+    label: 'Galet',
+    description: 'Ramassé à la main près des tas de galets. Sert à crafter la pioche.',
+    color: '#555566',
+  },
   wood: {
     emoji: '🪵',
     label: 'Bois',
-    description: 'Récolté en tapant sur les arbres.',
+    description: 'Récolté avec la hache en bois près des arbres.',
     color: '#8b5e3c',
   },
   stone: {
     emoji: '🪨',
     label: 'Pierre',
-    description: 'Récolté en tapant sur les rochers.',
+    description: 'Récoltée avec la pioche en pierre près des rochers.',
     color: '#7a7a8a',
   },
   plank: {
     emoji: '📋',
     label: 'Planche',
-    description: 'Fabriquée à partir de 5 bois.',
+    description: 'Fabriquée à partir de 3 bois.',
     color: '#b8924a',
   },
   brick: {

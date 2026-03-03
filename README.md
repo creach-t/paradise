@@ -1,6 +1,8 @@
-# 🌴 Paradise — Jeu de récolte mobile
+# 🌴 Paradise — Jeu de farming mobile
 
-Jeu de survie / récolte mobile-first exportable en APK Android, construit sur React Native / Expo.
+Jeu de **farming et récolte** mobile-first exportable en APK Android, construit sur React Native / Expo.
+
+Pas de combat, pas de survie hardcore — juste le plaisir de récolter, crafter, et construire progressivement dans un monde ouvert.
 
 ## Gameplay
 
@@ -20,16 +22,18 @@ Le joueur se déplace librement dans un monde ouvert via un **joystick virtuel**
   - ⬜ Gris : aucun objet à portée
 - Slot outil (HUD) → ouvrir l'Atelier
 
-**Énergie :** chaque récolte coûte de l'énergie (1 à la main · 2 à l'outil). La barre se régénère avec le temps.
+**Énergie :** chaque récolte coûte de l'énergie (1 à la main · 2 à l'outil).
+
+**XP & niveau :** chaque récolte rapporte de l'XP (5 pour buissons/galets · 15 pour arbres/rochers). Level-up automatique avec scaling.
 
 **Objets du monde :**
 
-| Objet | Outil requis | Récolte | Respawn |
-|-------|-------------|---------|---------|
-| 🌿 Buisson | Aucun | 1 brindille | 6 s |
-| ⚫ Tas de galets | Aucun | 1 galet | 8 s |
-| 🌲 Arbre | 🪓 Hache en bois | 2 bois | 12 s |
-| 🪨 Rocher | ⛏️ Pioche en pierre | 2 pierres | 18 s |
+| Objet | Outil requis | Récolte | XP | Respawn |
+|-------|-------------|---------|-----|---------|
+| 🌿 Buisson | Aucun | 1 brindille | +5 | 6 s |
+| ⚫ Tas de galets | Aucun | 1 galet | +5 | 8 s |
+| 🌲 Arbre | 🪓 Hache en bois | 2 bois | +15 | 12 s |
+| 🪨 Rocher | ⛏️ Pioche en pierre | 2 pierres | +15 | 18 s |
 
 ## Stack technique
 
@@ -38,7 +42,7 @@ Le joueur se déplace librement dans un monde ouvert via un **joystick virtuel**
 | Expo SDK | 55 (managed) | Framework mobile |
 | React Native | 0.83.2 | Runtime UI |
 | React | 19.2 | UI |
-| Zustand 4 | + persist + AsyncStorage | State + sauvegarde |
+| Zustand 4 | + persist + AsyncStorage | State + sauvegarde locale |
 | React Navigation | 6 (native-stack) | Navigation |
 | TypeScript | strict | Typage |
 | EAS Build | — | Génération APK/AAB |
@@ -53,11 +57,11 @@ Paradise/
 └── src/
     ├── types/index.ts                ← Tous les types partagés
     ├── constants/
-    │   ├── gameConfig.ts             ← Timings, coûts énergie, positions initiales
+    │   ├── gameConfig.ts             ← Timings, XP, coûts énergie, positions initiales
     │   └── craftRecipes.ts           ← Recettes (data-driven)
     ├── store/
     │   ├── gameStore.ts              ← Monde : ressources, outils, nœuds récoltables
-    │   └── playerStore.ts            ← Joueur : position, énergie, niveau, outil équipé
+    │   └── playerStore.ts            ← Joueur : position, énergie, niveau, XP, outil équipé
     ├── hooks/
     │   ├── useRespawn.ts             ← Respawn automatique (tick 1 s)
     │   ├── usePlayerMovement.ts      ← Mouvement joueur (tick 62 ms)
@@ -67,15 +71,15 @@ Paradise/
     │   ├── MainMenuScreen.tsx        ← Menu principal
     │   ├── GameScreen.tsx            ← HUD + GameScene
     │   ├── CraftScreen.tsx           ← Atelier (outils + matériaux)
-    │   └── InventoryScreen.tsx       ← Ressources + stats joueur
+    │   └── InventoryScreen.tsx       ← Ressources + stats joueur (XP, énergie)
     └── components/
         ├── game/
         │   ├── GameScene.tsx         ← WorldLayer + ControlsOverlay
-        │   ├── Tree / Rock           ← Objets récoltables (View purs)
-        │   ├── Twig / PebbleCluster  ← Ressources de base (View purs)
+        │   ├── Tree / Rock           ← Objets récoltables (View purs, isHighlighted)
+        │   ├── Twig / PebbleCluster  ← Ressources de base (View purs, isHighlighted)
         │   ├── ActionButton.tsx      ← Bouton d'interaction contextuel
-        │   ├── PlayerCharacter.tsx   ← Sprite joueur (memo)
-        │   └── VirtualJoystick.tsx   ← Joystick (PanResponder)
+        │   ├── PlayerCharacter.tsx   ← Sprite joueur (React.memo)
+        │   └── VirtualJoystick.tsx   ← Joystick (PanResponder, 0 re-render)
         └── hud/HUD.tsx               ← Ressources + barre énergie + slot outil
 ```
 
@@ -98,17 +102,22 @@ npm install -g eas-cli
 eas login
 eas build --platform android --profile preview    # APK (test)
 eas build --platform android --profile production # AAB (Play Store)
-# APK téléchargeable depuis expo.dev
 ```
 
-## Extension prévue
+## Roadmap
 
-| Fonctionnalité | Fichier cible |
-|---|---|
-| Monde scrollable | `ScrollView` + offset caméra centré sur le joueur dans `GameScene.tsx` |
-| Animations bounce | `Animated.Value` dans `Tree.tsx` / `Rock.tsx` au moment du harvest |
-| XP au harvest | `addXp(n)` dans les actions harvest du `gameStore.ts` |
-| Ennemis | `EnemyNode extends HarvestableNode` + scan dans `useNearestHarvestable` |
-| Sons | `expo-av` sur les events de récolte |
-| Paramètres | `SettingsScreen` (son, langue, reset save) |
-| Cercle de portée | Indicateur visuel autour du joueur (rayon = `INTERACT_RANGE`) |
+| Milestone | Fonctionnalité |
+|-----------|---------------|
+| **M1** | Monde scrollable — caméra suit le joueur |
+| **M1** | Cycle jour/nuit — rythme farming |
+| **M1** | Paramètres — son, reset save |
+| **M2** | Potager — planter → faire pousser → récolter |
+| **M2** | Nouvelles cultures — baies, céréales, champignons |
+| **M2** | Arrosage & compost |
+| **M3** | Maison évolutive (bois → pierre → brique) |
+| **M3** | Stockage étendu — coffres, grenier |
+| **M4** | Dégradation des outils + réparation |
+| **M4** | Arbre de craft étendu — métal, cuisine, textile |
+| **M5** | Zones débloquées progressivement |
+| **M5** | Météo & saisons — impact sur les cultures |
+| **M5** | Monstres rares — spawn nocturne uniquement |
