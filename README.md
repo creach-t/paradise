@@ -2,7 +2,7 @@
 
 Jeu de **farming et récolte** mobile-first exportable en APK Android, construit sur React Native / Expo.
 
-Pas de combat, pas de survie hardcore — juste le plaisir de récolter, crafter, et construire progressivement dans un monde ouvert scrollable.
+Pas de combat, pas de survie hardcore — juste le plaisir de récolter, crafter, cultiver, et construire progressivement dans un monde ouvert scrollable.
 
 ## Gameplay
 
@@ -10,22 +10,26 @@ Le joueur se déplace librement dans un **monde ouvert (800 × 1400 px)** via un
 
 **Progression principale :**
 ```
-🌿 Buissons → Brindilles ×3 → 🪓 Hache en bois  → 🌲 Arbres → Bois  → 📋 Planches
-⚫ Galets   → Galets ×3     → ⛏️ Pioche en pierre → 🪨 Rochers → Pierre → 🧱 Briques
+🌿 Buissons   → Brindilles ×3 → 🪓 Hache en bois   → 🌲 Arbres → Bois   → 📋 Planches
+⚫ Galets     → Galets ×3     → ⛏️ Pioche en pierre → 🪨 Rochers → Pierre → 🧱 Briques
+🌾 Brindilles → Compost ×2   → 🌿 Engrais
+💧 Source d'eau → Eau → 🌱 Arroser le potager → accélère la pousse
+🌱 Graines    → Potager       → 🍓 Baies / 🌾 Céréales / 🍄 Champignons
 ```
 
 **Contrôles :**
 - Joystick (bas-gauche) → déplacer le joueur
 - Bouton d'action (bas-droite) → interagir avec l'objet le plus proche (rayon 80 px)
-  - 🟢 Vert : objet accessible → récolter
-  - 🟠 Orange : outil requis non équipé
+  - 🟢 Vert : objet accessible → récolter / planter / récolter
+  - 🔵 Bleu : arroser un lit de potager (consomme 1 eau)
+  - 🟠 Orange : outil requis non équipé ou ressource manquante
   - ⬜ Gris : aucun objet à portée
 - ☰ (HUD haut-gauche) → menu de navigation (Inventaire, Atelier, Paramètres, Menu principal)
 - Slot outil (HUD haut-droite) → ouvrir l'Atelier
 
-**Énergie :** chaque récolte coûte de l'énergie (1 à la main · 2 à l'outil).
+**Énergie :** chaque récolte coûte de l'énergie (1 à la main · 2 à l'outil · 1 pour le potager).
 
-**XP & niveau :** chaque récolte rapporte de l'XP (5 pour buissons/galets · 15 pour arbres/rochers). Level-up automatique avec scaling.
+**XP & niveau :** chaque récolte rapporte de l'XP (5 buissons/galets · 10 potager · 15 arbres/rochers). Level-up automatique avec scaling.
 
 **Cycle jour/nuit :** cycle complet de 5 minutes — overlay bleu nuit progressif (formule cosinus lisse).
 
@@ -37,8 +41,18 @@ Le joueur se déplace librement dans un **monde ouvert (800 × 1400 px)** via un
 | ⚫ Tas de galets | Aucun | 1 galet | +5 | 8 s |
 | 🌲 Arbre | 🪓 Hache en bois | 2 bois | +15 | 12 s |
 | 🪨 Rocher | ⛏️ Pioche en pierre | 2 pierres | +15 | 18 s |
+| 🌱 Lit de potager | Aucun | graine → culture | +10 | — |
+| 🌊 Source d'eau | Aucun | 2 eau | — | 10 s |
 
-**Monde :** zone de départ (arbres, rochers, buissons, galets) + clusters supplémentaires au sud et à l'est accessibles en explorant.
+**Potager (M2) :**
+
+| Graine | Pousse | Récolte | Arrosage |
+|--------|--------|---------|---------|
+| 🍓 Graine de baie | 30 s | 3 baies + 1 graine | −15 s |
+| 🌾 Graine de céréale | 60 s | 2 céréales + 1 graine | −15 s |
+| 🍄 Graine de champignon | 90 s | 1 champignon + 1 graine | −15 s |
+
+**Monde :** zone de départ + clusters au sud et à l'est accessibles en explorant. 4 lits de potager à droite de la maison. Source d'eau à l'est.
 
 ## Stack technique
 
@@ -65,10 +79,10 @@ Paradise/
     │   ├── gameConfig.ts             ← Timings, XP, énergie, WORLD_W/H, positions monde
     │   └── craftRecipes.ts           ← Recettes (data-driven)
     ├── store/
-    │   ├── gameStore.ts              ← Monde : ressources, outils, nœuds récoltables
+    │   ├── gameStore.ts              ← Monde : ressources, outils, nœuds, potager
     │   └── playerStore.ts            ← Joueur : position, énergie, niveau, XP, outil équipé
     ├── hooks/
-    │   ├── useRespawn.ts             ← Respawn automatique (tick 1 s)
+    │   ├── useRespawn.ts             ← Respawn + pousse potager (tick 1 s)
     │   ├── usePlayerMovement.ts      ← Mouvement joueur (tick 62 ms)
     │   ├── useNearestHarvestable.ts  ← Détection proximité (tick 150 ms, rayon 80 px)
     │   └── useDayNightCycle.ts       ← Cycle jour/nuit (tick 1 s, Animated.Value)
@@ -76,7 +90,7 @@ Paradise/
     ├── screens/
     │   ├── MainMenuScreen.tsx        ← Menu principal
     │   ├── GameScreen.tsx            ← HUD + GameScene
-    │   ├── CraftScreen.tsx           ← Atelier (outils + matériaux)
+    │   ├── CraftScreen.tsx           ← Atelier (outils + matériaux + compost)
     │   ├── InventoryScreen.tsx       ← Ressources + stats joueur (XP, énergie)
     │   └── SettingsScreen.tsx        ← Paramètres (reset sauvegarde)
     └── components/
@@ -84,7 +98,9 @@ Paradise/
         │   ├── GameScene.tsx         ← WorldLayer (Animated.View) + NightOverlay + ControlsOverlay
         │   ├── Tree / Rock           ← Objets récoltables (View purs, isHighlighted)
         │   ├── Twig / PebbleCluster  ← Ressources de base (View purs, isHighlighted)
-        │   ├── ActionButton.tsx      ← Bouton d'interaction contextuel
+        │   ├── GardenBed.tsx         ← Lit de potager (empty / growing / ready)
+        │   ├── WaterSource.tsx       ← Source d'eau (disponible / cooldown)
+        │   ├── ActionButton.tsx      ← Bouton d'interaction contextuel (récolte, potager, eau)
         │   ├── PlayerCharacter.tsx   ← Sprite joueur (React.memo)
         │   └── VirtualJoystick.tsx   ← Joystick (PanResponder, 0 re-render)
         └── hud/HUD.tsx               ← ☰ menu + barre énergie + niveau + slot outil
@@ -118,13 +134,17 @@ eas build --platform android --profile production # AAB (Play Store)
 | **M1** | ✅ | Monde scrollable — caméra suit le joueur |
 | **M1** | ✅ | Cycle jour/nuit — rythme farming |
 | **M1** | ✅ | Paramètres — reset save |
-| **M2** | ⬜ | Potager — planter → faire pousser → récolter |
-| **M2** | ⬜ | Nouvelles cultures — baies, céréales, champignons |
-| **M2** | ⬜ | Arrosage & compost |
+| **M2** | ✅ | Potager — planter → faire pousser → récolter |
+| **M2** | ✅ | Nouvelles cultures — baies, céréales, champignons |
+| **M2** | ✅ | Arrosage & compost / engrais |
 | **M3** | ⬜ | Maison évolutive (bois → pierre → brique) |
 | **M3** | ⬜ | Stockage étendu — coffres, grenier |
+| **M4** | ⬜ | Craft progressif par station (mains → atelier → forge → cuisine) |
 | **M4** | ⬜ | Dégradation des outils + réparation |
 | **M4** | ⬜ | Arbre de craft étendu — métal, cuisine, textile |
 | **M5** | ⬜ | Zones débloquées progressivement |
 | **M5** | ⬜ | Météo & saisons — impact sur les cultures |
 | **M5** | ⬜ | Monstres rares — spawn nocturne uniquement |
+| **M6** | ⬜ | Système de layers (sol, déco, objets, FX) |
+| **M6** | ⬜ | Génération de map procédurale (biomes, seed) |
+| **M6** | ⬜ | Hitboxes & collisions joueur |
