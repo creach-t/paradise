@@ -9,15 +9,22 @@ import {
   RockNode,
   TwigNode,
   PebbleNode,
+  GardenBedNode,
+  WaterSourceNode,
   ResourceType,
   CraftRecipe,
+  SeedType,
 } from '../types';
 import {
   INITIAL_TREES,
   INITIAL_ROCKS,
   INITIAL_TWIGS,
   INITIAL_PEBBLES,
+  INITIAL_GARDEN_BEDS,
+  INITIAL_WATER_SOURCES,
   GAME_CONFIG,
+  GROWTH_BASE_MS,
+  CROP_YIELD,
 } from '../constants/gameConfig';
 import { CRAFT_RECIPES } from '../constants/craftRecipes';
 
@@ -31,6 +38,8 @@ interface GameState {
   rocks: RockNode[];
   twigs: TwigNode[];
   pebbles: PebbleNode[];
+  gardenBeds: GardenBedNode[];
+  waterSources: WaterSourceNode[];
 }
 
 interface GameActions {
@@ -47,6 +56,19 @@ interface GameActions {
   respawnRock: (id: string) => void;
   respawnTwig: (id: string) => void;
   respawnPebble: (id: string) => void;
+  respawnWaterSource: (id: string) => void;
+
+  // ── Potager (M2) ────────────────────────────────────────────────────────────
+  /** Plante une graine sur un lit vide. Consomme 1 graine + énergie. */
+  plantSeed: (bedId: string, seedType: SeedType) => void;
+  /** Arrose un lit en cours de pousse. Consomme 1 eau + énergie. Réduit readyAt. */
+  waterBed: (bedId: string) => void;
+  /** Récolte une culture prête. Retourne ressources + 1 graine. */
+  harvestCrop: (bedId: string) => void;
+  /** Transition growing → ready déclenchée par useRespawn. */
+  advanceGardenBed: (bedId: string) => void;
+  /** Collecte de l'eau à la source. */
+  harvestWater: (sourceId: string) => void;
 
   /**
    * Tente de crafter une recette (outil ou ressource).
@@ -69,6 +91,16 @@ const initialResources: ResourceInventory = {
   stone: 0,
   plank: 0,
   brick: 0,
+  // M2 Farming — quelques graines de départ pour le joueur
+  water: 0,
+  berry: 0,
+  grain: 0,
+  mushroom: 0,
+  berry_seed: 3,
+  grain_seed: 2,
+  mushroom_seed: 1,
+  compost: 0,
+  fertilizer: 0,
 };
 
 /** Transforme une config statique en nœud de jeu avec l'état de départ. */
@@ -77,13 +109,29 @@ const buildNodes = <T extends { id: string; x: number; y: number; type: string }
 ): Array<T & { isHarvested: false; respawnAt: null }> =>
   configs.map((c) => ({ ...c, isHarvested: false, respawnAt: null }));
 
+/** Construit les lits de potager avec leur état initial (vides). */
+const buildGardenBeds = (
+  configs: Array<Pick<GardenBedNode, 'id' | 'x' | 'y' | 'type'>>,
+): GardenBedNode[] =>
+  configs.map((c) => ({
+    ...c,
+    isHarvested: false,
+    respawnAt: null,
+    state: 'empty' as const,
+    seedType: null,
+    readyAt: null,
+    wateredCount: 0,
+  }));
+
 const initialState: GameState = {
   resources: initialResources,
   tools: {},
-  trees:   buildNodes(INITIAL_TREES)   as TreeNode[],
-  rocks:   buildNodes(INITIAL_ROCKS)   as RockNode[],
-  twigs:   buildNodes(INITIAL_TWIGS)   as TwigNode[],
-  pebbles: buildNodes(INITIAL_PEBBLES) as PebbleNode[],
+  trees:        buildNodes(INITIAL_TREES)          as TreeNode[],
+  rocks:        buildNodes(INITIAL_ROCKS)          as RockNode[],
+  twigs:        buildNodes(INITIAL_TWIGS)          as TwigNode[],
+  pebbles:      buildNodes(INITIAL_PEBBLES)        as PebbleNode[],
+  gardenBeds:   buildGardenBeds(INITIAL_GARDEN_BEDS),
+  waterSources: buildNodes(INITIAL_WATER_SOURCES)  as WaterSourceNode[],
 };
 
 // ─── Helpers inter-stores ──────────────────────────────────────────────────────
@@ -235,6 +283,88 @@ export const useGameStore = create<GameStore>()(
       respawnPebble: (id) =>
         set((s) => ({ pebbles: s.pebbles.map((p) => p.id === id ? { ...p, isHarvested: false, respawnAt: null } : p) })),
 
+      respawnWaterSource: (id) =>
+        set((s) => ({ waterSources: s.waterSources.map((w) => w.id === id ? { ...w, isHarvested: false, respawnAt: null } : w) })),
+
+      // ── Potager (M2) ──────────────────────────────────────────────────────
+
+      plantSeed: (bedId, seedType) => {
+        const bed = get().gardenBeds.find((b) => b.id === bedId);
+        if (!bed || bed.state !== 'empty') return;
+        if (get().resources[seedType] <= 0) return;
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_GARDEN)) return;
+
+        set((state) => ({
+          resources: { ...state.resources, [seedType]: state.resources[seedType] - 1 },
+          gardenBeds: state.gardenBeds.map((b) =>
+            b.id === bedId
+              ? { ...b, state: 'growing' as const, seedType, readyAt: Date.now() + GROWTH_BASE_MS[seedType], wateredCount: 0 }
+              : b,
+          ),
+        }));
+      },
+
+      waterBed: (bedId) => {
+        const bed = get().gardenBeds.find((b) => b.id === bedId);
+        if (!bed || bed.state !== 'growing' || bed.readyAt === null) return;
+        if (get().resources.water <= 0) return;
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_GARDEN)) return;
+
+        set((state) => ({
+          resources: { ...state.resources, water: state.resources.water - 1 },
+          gardenBeds: state.gardenBeds.map((b) => {
+            if (b.id !== bedId || b.readyAt === null) return b;
+            const newReadyAt = Math.max(Date.now() + 1_000, b.readyAt - GAME_CONFIG.WATERED_REDUCTION_MS);
+            return { ...b, readyAt: newReadyAt, wateredCount: b.wateredCount + 1 };
+          }),
+        }));
+      },
+
+      harvestCrop: (bedId) => {
+        const bed = get().gardenBeds.find((b) => b.id === bedId);
+        if (!bed || bed.state !== 'ready' || bed.seedType === null) return;
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_GARDEN)) return;
+
+        const { resource, amount } = CROP_YIELD[bed.seedType];
+        const seedType = bed.seedType;
+
+        set((state) => ({
+          resources: {
+            ...state.resources,
+            [resource]: state.resources[resource] + amount,
+            [seedType]: state.resources[seedType] + 1, // retour 1 graine
+          },
+          gardenBeds: state.gardenBeds.map((b) =>
+            b.id === bedId
+              ? { ...b, state: 'empty' as const, seedType: null, readyAt: null, wateredCount: 0 }
+              : b,
+          ),
+        }));
+        addPlayerXp(GAME_CONFIG.XP_GARDEN_HARVEST);
+      },
+
+      advanceGardenBed: (bedId) =>
+        set((s) => ({
+          gardenBeds: s.gardenBeds.map((b) =>
+            b.id === bedId && b.state === 'growing' ? { ...b, state: 'ready' as const } : b,
+          ),
+        })),
+
+      harvestWater: (sourceId) => {
+        const src = get().waterSources.find((w) => w.id === sourceId);
+        if (!src || src.isHarvested) return;
+        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_HAND)) return;
+
+        set((state) => ({
+          resources: { ...state.resources, water: state.resources.water + GAME_CONFIG.WATER_PER_TAP },
+          waterSources: state.waterSources.map((w) =>
+            w.id === sourceId
+              ? { ...w, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.WATER_SOURCE_RESPAWN_DELAY }
+              : w,
+          ),
+        }));
+      },
+
       // ── Craft ─────────────────────────────────────────────────────────────
 
       craft: (recipeId) => {
@@ -305,10 +435,12 @@ export const useGameStore = create<GameStore>()(
             ...currentState.resources,
             ...(ps.resources ?? {}),
           },
-          trees:   mergeNodes(ps.trees,   currentState.trees),
-          rocks:   mergeNodes(ps.rocks,   currentState.rocks),
-          twigs:   mergeNodes(ps.twigs,   currentState.twigs),
-          pebbles: mergeNodes(ps.pebbles, currentState.pebbles),
+          trees:        mergeNodes(ps.trees,        currentState.trees),
+          rocks:        mergeNodes(ps.rocks,        currentState.rocks),
+          twigs:        mergeNodes(ps.twigs,        currentState.twigs),
+          pebbles:      mergeNodes(ps.pebbles,      currentState.pebbles),
+          gardenBeds:   mergeNodes(ps.gardenBeds,   currentState.gardenBeds),
+          waterSources: mergeNodes(ps.waterSources, currentState.waterSources),
         };
       },
     },

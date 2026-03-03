@@ -12,6 +12,8 @@ import { Tree } from './Tree';
 import { Rock } from './Rock';
 import { Twig } from './Twig';
 import { PebbleCluster } from './PebbleCluster';
+import { GardenBed } from './GardenBed';
+import { WaterSource } from './WaterSource';
 import { House } from './House';
 import { PlayerCharacter } from './PlayerCharacter';
 import { VirtualJoystick } from './VirtualJoystick';
@@ -43,10 +45,12 @@ const HOUSE_Y = 370;
 export const GameScene: React.FC = () => {
   const { width: sw, height: sh } = useWindowDimensions();
 
-  const trees   = useGameStore((s) => s.trees);
-  const rocks   = useGameStore((s) => s.rocks);
-  const twigs   = useGameStore((s) => s.twigs);
-  const pebbles = useGameStore((s) => s.pebbles);
+  const trees        = useGameStore((s) => s.trees);
+  const rocks        = useGameStore((s) => s.rocks);
+  const twigs        = useGameStore((s) => s.twigs);
+  const pebbles      = useGameStore((s) => s.pebbles);
+  const gardenBeds   = useGameStore((s) => s.gardenBeds);
+  const waterSources = useGameStore((s) => s.waterSources);
 
   // Direction du joystick — ref partagée, 0 re-render.
   const directionRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
@@ -136,6 +140,24 @@ export const GameScene: React.FC = () => {
             key={pbl.id}
             pebble={pbl}
             isHighlighted={target?.id === pbl.id}
+          />
+        ))}
+
+        {/* Lits de potager */}
+        {gardenBeds.map((bed) => (
+          <GardenBed
+            key={bed.id}
+            bed={bed}
+            isHighlighted={target?.id === bed.id}
+          />
+        ))}
+
+        {/* Sources d'eau */}
+        {waterSources.map((src) => (
+          <WaterSource
+            key={src.id}
+            node={src}
+            isHighlighted={target?.id === src.id}
           />
         ))}
 

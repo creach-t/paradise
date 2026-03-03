@@ -50,4 +50,23 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     outputAmount: 1,
     requirements: { stone: 3 },
   },
+
+  // ── Farming (M2) — compostage ───────────────────────────────────────────────
+
+  {
+    id: 'compost',
+    name: 'Compost',
+    category: 'resource',
+    output: 'compost',
+    outputAmount: 1,
+    requirements: { branch: 4 },
+  },
+  {
+    id: 'fertilizer',
+    name: 'Engrais',
+    category: 'resource',
+    output: 'fertilizer',
+    outputAmount: 1,
+    requirements: { compost: 2 },
+  },
 ];
