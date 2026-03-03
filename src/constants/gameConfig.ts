@@ -1,5 +1,19 @@
 import { TreeNode, RockNode, TwigNode, PebbleNode } from '../types';
 
+// ─── Dimensions du monde ──────────────────────────────────────────────────────
+
+/** Largeur totale du monde en pixels. */
+export const WORLD_W = 800;
+/** Hauteur totale du monde en pixels. */
+export const WORLD_H = 1400;
+
+// ─── Cycle jour/nuit ──────────────────────────────────────────────────────────
+
+/** Durée d'un cycle complet jour/nuit (ms). 5 min = 300 000 ms. */
+export const DAY_CYCLE_MS = 5 * 60 * 1000;
+/** Opacité max de l'overlay nocturne (0 = invisible, 1 = noir total). */
+export const NIGHT_MAX_OPACITY = 0.62;
+
 // ─── Timings ──────────────────────────────────────────────────────────────────
 
 export const GAME_CONFIG = {
@@ -78,6 +92,21 @@ export const INITIAL_TREES: InitialTree[] = [
   // Lisière (arbres isolés)
   { id: 'tree_10', type: 'tree', x: 34,  y: 148 },
   { id: 'tree_11', type: 'tree', x: 118, y: 40  },
+
+  // ─── Forêt du sud (cluster bas-gauche) ────────────────────────────────────
+  { id: 'tree_12', type: 'tree', x: 30,  y: 540 },
+  { id: 'tree_13', type: 'tree', x: 70,  y: 520 },
+  { id: 'tree_14', type: 'tree', x: 110, y: 555 },
+  { id: 'tree_15', type: 'tree', x: 50,  y: 600 },
+  { id: 'tree_16', type: 'tree', x: 90,  y: 585 },
+  { id: 'tree_17', type: 'tree', x: 130, y: 615 },
+
+  // ─── Bosquet profond (exploration lointaine) ───────────────────────────────
+  { id: 'tree_18', type: 'tree', x: 340, y: 880 },
+  { id: 'tree_19', type: 'tree', x: 385, y: 855 },
+  { id: 'tree_20', type: 'tree', x: 425, y: 895 },
+  { id: 'tree_21', type: 'tree', x: 360, y: 940 },
+  { id: 'tree_22', type: 'tree', x: 400, y: 965 },
 ];
 
 // ─── Rochers (cluster haut-droit) ─────────────────────────────────────────────
@@ -88,6 +117,17 @@ export const INITIAL_ROCKS: InitialRock[] = [
   { id: 'rock_3', type: 'rock', x: 260, y: 128 },
   { id: 'rock_4', type: 'rock', x: 302, y: 152 },
   { id: 'rock_5', type: 'rock', x: 273, y: 182 },
+
+  // ─── Rochers de l'est (monde étendu) ──────────────────────────────────────
+  { id: 'rock_6',  type: 'rock', x: 560, y: 130 },
+  { id: 'rock_7',  type: 'rock', x: 600, y: 165 },
+  { id: 'rock_8',  type: 'rock', x: 640, y: 105 },
+  { id: 'rock_9',  type: 'rock', x: 580, y: 210 },
+
+  // ─── Rochers profonds (exploration lointaine) ─────────────────────────────
+  { id: 'rock_10', type: 'rock', x: 580, y: 790 },
+  { id: 'rock_11', type: 'rock', x: 625, y: 830 },
+  { id: 'rock_12', type: 'rock', x: 600, y: 875 },
 ];
 
 // ─── Buissons de brindilles (zone centrale) ───────────────────────────────────
@@ -98,6 +138,12 @@ export const INITIAL_TWIGS: InitialTwig[] = [
   { id: 'twig_2', type: 'twig', x: 175, y: 145 },
   { id: 'twig_3', type: 'twig', x: 138, y: 208 },
   { id: 'twig_4', type: 'twig', x: 192, y: 65  },
+
+  // ─── Buissons du sud (monde étendu) ───────────────────────────────────────
+  { id: 'twig_5', type: 'twig', x: 255, y: 475 },
+  { id: 'twig_6', type: 'twig', x: 320, y: 530 },
+  { id: 'twig_7', type: 'twig', x: 185, y: 570 },
+  { id: 'twig_8', type: 'twig', x: 380, y: 445 },
 ];
 
 // ─── Tas de petits galets (zone centrale-droite) ──────────────────────────────
@@ -107,4 +153,9 @@ export const INITIAL_PEBBLES: InitialPebble[] = [
   { id: 'pbl_1', type: 'pebble_cluster', x: 226, y: 82  },
   { id: 'pbl_2', type: 'pebble_cluster', x: 240, y: 162 },
   { id: 'pbl_3', type: 'pebble_cluster', x: 218, y: 238 },
+
+  // ─── Galets du sud-est (monde étendu) ─────────────────────────────────────
+  { id: 'pbl_4', type: 'pebble_cluster', x: 455, y: 380 },
+  { id: 'pbl_5', type: 'pebble_cluster', x: 500, y: 460 },
+  { id: 'pbl_6', type: 'pebble_cluster', x: 540, y: 340 },
 ];

@@ -5,6 +5,7 @@ import { MainMenuScreen } from '../screens/MainMenuScreen';
 import { GameScreen } from '../screens/GameScreen';
 import { CraftScreen } from '../screens/CraftScreen';
 import { InventoryScreen } from '../screens/InventoryScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 
 /**
  * Paramètres de chaque route.
@@ -20,8 +21,8 @@ export type RootStackParamList = {
   Game: undefined;
   Craft: undefined;
   Inventory: undefined;
+  Settings: undefined;
   // Futurs :
-  // Settings: undefined;
   // CharacterSheet: undefined;
   // Map: undefined;
 };
@@ -67,6 +68,11 @@ export const AppNavigator: React.FC = () => {
         <Stack.Screen
           name="Inventory"
           component={InventoryScreen}
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
           options={{ animation: 'slide_from_bottom' }}
         />
       </Stack.Navigator>

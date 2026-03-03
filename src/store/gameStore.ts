@@ -281,20 +281,34 @@ export const useGameStore = create<GameStore>()(
       storage: createJSONStorage(() => AsyncStorage),
 
       // ── Merge personnalisé ────────────────────────────────────────────────
-      // Garantit que les nouvelles clés de ResourceInventory (branch, pebble…)
-      // reçoivent leur valeur par défaut même sur des sauvegardes anciennes qui
-      // ne les contiennent pas. Sans ce merge, les nouvelles clés seraient
-      // `undefined` après réhydratation → NaN au premier harvest.
+      // 1. Resources : deep merge → les nouvelles clés tombent à 0 si absentes.
+      // 2. Nœuds (trees, rocks, twigs, pebbles) : on garde l'état des nœuds
+      //    persistés (harvest, respawn) ET on ajoute les nouveaux nœuds issus
+      //    de la config (ceux dont l'id est absent de la sauvegarde).
       merge: (persistedState: unknown, currentState: GameStore): GameStore => {
         const ps = persistedState as Partial<GameState>;
+
+        function mergeNodes<T extends { id: string }>(
+          persisted: T[] | undefined,
+          current: T[],
+        ): T[] {
+          if (!persisted || persisted.length === 0) return current;
+          const knownIds = new Set(persisted.map((n) => n.id));
+          const newNodes = current.filter((n) => !knownIds.has(n.id));
+          return [...persisted, ...newNodes];
+        }
+
         return {
           ...currentState,
           ...ps,
-          // Deep merge sur resources : les clés manquantes tombent sur 0.
           resources: {
-            ...currentState.resources,   // toutes les clés à 0 par défaut
-            ...(ps.resources ?? {}),     // valeurs persistées écrasent si présentes
+            ...currentState.resources,
+            ...(ps.resources ?? {}),
           },
+          trees:   mergeNodes(ps.trees,   currentState.trees),
+          rocks:   mergeNodes(ps.rocks,   currentState.rocks),
+          twigs:   mergeNodes(ps.twigs,   currentState.twigs),
+          pebbles: mergeNodes(ps.pebbles, currentState.pebbles),
         };
       },
     },

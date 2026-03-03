@@ -1,44 +1,45 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  StatusBar,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useGameStore } from '../../store/gameStore';
 import { usePlayerStore } from '../../store/playerStore';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
-import type { ResourceInventory, ToolType } from '../../types';
+import type { ToolType } from '../../types';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Game'>;
 
-// Ressources affichées dans la barre (brindilles + galets + matériaux secondaires).
-const HUD_RESOURCES: { key: keyof ResourceInventory; emoji: string }[] = [
-  { key: 'branch', emoji: '🌿' },
-  { key: 'pebble', emoji: '⚫' },
-  { key: 'wood',   emoji: '🪵' },
-  { key: 'stone',  emoji: '🪨' },
-];
-
 const TOOL_EMOJI: Record<ToolType, string> = {
-  wooden_axe:     '🪓',
-  stone_pickaxe:  '⛏️',
+  wooden_axe:    '🪓',
+  stone_pickaxe: '⛏️',
 };
+
+const MENU_ITEMS: { label: string; route: keyof RootStackParamList }[] = [
+  { label: '🏠  Menu principal', route: 'MainMenu' },
+  { label: '📦  Inventaire',     route: 'Inventory' },
+  { label: '⚒️   Atelier',        route: 'Craft' },
+  { label: '⚙️   Paramètres',     route: 'Settings' },
+];
 
 /**
  * HUD — barre fixe en haut de l'écran.
  *
- * ─── Contenu ───────────────────────────────────────────────────────────────────
- *  ┌──────────────────────────────────────────────────────────────────┐
- *  │ 🪵 3  🪨 1  📋 0  🧱 0  │  ⚡ ██████░░ 80/100  │  ⚒️ Craft  │
- *  └──────────────────────────────────────────────────────────────────┘
+ * ┌────────────────────────────────────────────┐
+ * │  ≡  │  ⚡ ██████░░  80/100  Lv5  │  🪓   │
+ * └────────────────────────────────────────────┘
  *
- * ─── Prêt pour ─────────────────────────────────────────────────────────────────
- * - Barre de vie (HP) séparée
- * - Indicateur de quête active
- * - Minimap dans un coin
- * - Notifications d'events flottantes
+ * Le bouton ≡ ouvre un modal dropdown de navigation.
+ * Les ressources sont consultables via l'Inventaire.
  */
 export const HUD: React.FC = () => {
-  const resources = useGameStore((s) => s.resources);
   const navigation = useNavigation<NavProp>();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const energy       = usePlayerStore((s) => s.player.stats.energy);
   const maxEnergy    = usePlayerStore((s) => s.player.stats.maxEnergy);
@@ -48,46 +49,83 @@ export const HUD: React.FC = () => {
   const energyPercent = maxEnergy > 0 ? energy / maxEnergy : 0;
   const energyColor = energyPercent > 0.5 ? '#4ade80' : energyPercent > 0.25 ? '#facc15' : '#f87171';
 
+  const handleNav = (route: keyof RootStackParamList) => {
+    setMenuOpen(false);
+    // Petit délai pour laisser le modal se fermer avant la navigation.
+    setTimeout(() => navigation.navigate(route as never), 80);
+  };
+
   return (
-    <View style={styles.container}>
-      {/* ── Ressources ── */}
-      <View style={styles.resourceRow}>
-        {HUD_RESOURCES.map(({ key, emoji }) => (
-          <View key={key} style={styles.chip}>
-            <Text style={styles.chipEmoji}>{emoji}</Text>
-            <Text style={styles.chipValue}>{resources[key]}</Text>
+    <>
+      <View style={styles.container}>
+        {/* ── Menu hamburger ── */}
+        <TouchableOpacity
+          style={styles.menuBtn}
+          onPress={() => setMenuOpen(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.menuBtnText}>☰</Text>
+        </TouchableOpacity>
+
+        {/* ── Énergie + niveau ── */}
+        <View style={styles.energySection}>
+          <View style={styles.energyLabelRow}>
+            <Text style={styles.energyEmoji}>⚡</Text>
+            <Text style={styles.energyValue}>{energy}/{maxEnergy}</Text>
+            <Text style={styles.levelLabel}>Lv{level}</Text>
           </View>
-        ))}
+          <View style={styles.energyBarBg}>
+            <View
+              style={[
+                styles.energyBarFill,
+                { width: `${Math.round(energyPercent * 100)}%`, backgroundColor: energyColor },
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* ── Slot outil équipé → ouvre l'Atelier ── */}
+        <TouchableOpacity
+          style={[styles.toolSlot, equippedTool && styles.toolSlotActive]}
+          onPress={() => navigation.navigate('Craft')}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.toolSlotText}>
+            {equippedTool ? TOOL_EMOJI[equippedTool] : '✋'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* ── Énergie + niveau ── */}
-      <View style={styles.energySection}>
-        <View style={styles.energyLabelRow}>
-          <Text style={styles.energyEmoji}>⚡</Text>
-          <Text style={styles.energyValue}>{energy}/{maxEnergy}</Text>
-          <Text style={styles.levelLabel}>Lv{level}</Text>
-        </View>
-        <View style={styles.energyBarBg}>
-          <View
-            style={[
-              styles.energyBarFill,
-              { width: `${Math.round(energyPercent * 100)}%`, backgroundColor: energyColor },
-            ]}
-          />
-        </View>
-      </View>
-
-      {/* ── Outil équipé ── */}
-      <TouchableOpacity
-        style={[styles.toolSlot, equippedTool && styles.toolSlotActive]}
-        onPress={() => navigation.navigate('Craft')}
-        activeOpacity={0.75}
+      {/* ── Modal menu dropdown ── */}
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setMenuOpen(false)}
       >
-        <Text style={styles.toolSlotText}>
-          {equippedTool ? TOOL_EMOJI[equippedTool] : '✋'}
-        </Text>
-      </TouchableOpacity>
-    </View>
+        {/* Backdrop — clic en dehors pour fermer */}
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setMenuOpen(false)}
+        />
+
+        {/* Dropdown positionné en haut-gauche, sous le HUD */}
+        <View style={styles.dropdown}>
+          {MENU_ITEMS.map((item, i) => (
+            <TouchableOpacity
+              key={item.route}
+              style={[styles.dropdownItem, i < MENU_ITEMS.length - 1 && styles.dropdownItemBorder]}
+              onPress={() => handleNav(item.route)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.dropdownItemText}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Modal>
+    </>
   );
 };
 
@@ -100,32 +138,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    gap: 8,
+    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  resourceRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  // Bouton hamburger
+  menuBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 14,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    gap: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  chipEmoji: {
-    fontSize: 12,
-  },
-  chipValue: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    minWidth: 14,
-    textAlign: 'right',
+  menuBtnText: {
+    color: '#e8f5e0',
+    fontSize: 18,
+    lineHeight: 22,
   },
 
   // Énergie
@@ -180,5 +212,40 @@ const styles = StyleSheet.create({
   },
   toolSlotText: {
     fontSize: 20,
+  },
+
+  // Modal
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: (StatusBar.currentHeight ?? 24) + 54, // safe area + HUD height
+    left: 12,
+    backgroundColor: 'rgba(15, 15, 30, 0.97)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 24,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    paddingVertical: 15,
+    paddingHorizontal: 18,
+  },
+  dropdownItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  dropdownItemText: {
+    color: '#e8f5e0',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

@@ -1,10 +1,13 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, LayoutChangeEvent } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { View, StyleSheet, Animated } from 'react-native';
 import { useWindowDimensions } from 'react-native';
 import { useGameStore } from '../../store/gameStore';
+import { usePlayerStore } from '../../store/playerStore';
 import { useRespawn } from '../../hooks/useRespawn';
 import { usePlayerMovement } from '../../hooks/usePlayerMovement';
 import { useNearestHarvestable } from '../../hooks/useNearestHarvestable';
+import { useDayNightCycle } from '../../hooks/useDayNightCycle';
+import { WORLD_W, WORLD_H } from '../../constants/gameConfig';
 import { Tree } from './Tree';
 import { Rock } from './Rock';
 import { Twig } from './Twig';
@@ -14,8 +17,8 @@ import { PlayerCharacter } from './PlayerCharacter';
 import { VirtualJoystick } from './VirtualJoystick';
 import { ActionButton } from './ActionButton';
 
-// ─── Constantes de disposition ────────────────────────────────────────────────
-
+// ─── Position fixe de la maison dans l'espace monde ───────────────────────────
+const HOUSE_X = 155;
 const HOUSE_Y = 370;
 
 /**
@@ -23,75 +26,79 @@ const HOUSE_Y = 370;
  *
  * ─── Architecture ─────────────────────────────────────────────────────────────
  *
- * GameScene (flex: 1)
- * ├── WorldLayer (StyleSheet.absoluteFill)     ← objets du monde
- * │     ├── Ground (couleur/image)
- * │     ├── Path (décoratif)
- * │     ├── House
- * │     ├── Trees[]           (View pur, isHighlighted si cible proche)
- * │     ├── Rocks[]           (View pur, isHighlighted si cible proche)
- * │     ├── Twigs[]           (View pur, isHighlighted si cible proche)
- * │     ├── PebbleClusters[]  (View pur, isHighlighted si cible proche)
- * │     └── PlayerCharacter   (z-index: 10)
- * └── ControlsOverlay (absolute, bottom, row)  ← contrôles HUD
- *       ├── VirtualJoystick   (gauche)
- *       └── ActionButton      (droite) ← déclenche la récolte en proximité
+ * GameScene (flex: 1, overflow: hidden)
+ * ├── WorldLayer (Animated.View, WORLD_W × WORLD_H)  ← objets monde + joueur
+ * │     translateX/Y = caméra centrée sur le joueur, clampée aux bords du monde
+ * ├── NightOverlay (absoluteFill, pointerEvents none) ← cycle jour/nuit
+ * └── ControlsOverlay (absolute, bottom)              ← joystick + ActionButton
  *
- * ─── Interaction joueur ───────────────────────────────────────────────────────
- * Le joueur se déplace via le joystick (directionRef, 0 re-render).
- * useNearestHarvestable() poll à 150 ms → renvoie la cible la plus proche.
- * ActionButton affiche l'action contextuelle et déclenche la récolte.
- * Les composants nœuds (Tree, Rock…) sont de purs View — aucun TouchableOpacity.
+ * ─── Caméra ───────────────────────────────────────────────────────────────────
+ * Abonnement au playerStore (subscribe) → mise à jour de cameraX/Y via
+ * Animated.Value.setValue() → zéro re-render React pour le déplacement.
  *
- * ─── Performance ──────────────────────────────────────────────────────────────
- * - useWindowDimensions() ← réactif à l'orientation
- * - directionRef écrit par VirtualJoystick sans setState → 0 re-render HUD
- * - PlayerCharacter re-rend seul à chaque tick de mouvement (~16fps)
- * - WorldLayer ne re-rend que lors des harvests ou changements de cible
+ * ─── Cycle jour/nuit ──────────────────────────────────────────────────────────
+ * useDayNightCycle() retourne un Animated.Value (opacité 0..NIGHT_MAX_OPACITY)
+ * appliqué sur un overlay plein-écran rgba(0, 0, 30, 1) via interpolation.
  */
 export const GameScene: React.FC = () => {
-  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const { width: sw, height: sh } = useWindowDimensions();
 
   const trees   = useGameStore((s) => s.trees);
   const rocks   = useGameStore((s) => s.rocks);
   const twigs   = useGameStore((s) => s.twigs);
   const pebbles = useGameStore((s) => s.pebbles);
 
-  // Dimensions réelles de la scène (après layout) pour clamper le joueur.
-  const [worldBounds, setWorldBounds] = useState({ w: SCREEN_WIDTH, h: 600 });
-
-  const handleWorldLayout = useCallback((e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setWorldBounds({ w: width, h: height });
-  }, []);
-
-  // Direction du joystick — ref partagée entre VirtualJoystick et le hook.
-  // Aucun re-render lors du mouvement du joystick.
+  // Direction du joystick — ref partagée, 0 re-render.
   const directionRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
 
-  // Active les systèmes de jeu.
+  // ── Caméra (Animated.Value — mise à jour sans re-render) ────────────────────
+  const cameraX = useRef(new Animated.Value(0)).current;
+  const cameraY = useRef(new Animated.Value(0)).current;
+
+  // Refs pour les dimensions écran (stables dans le callback subscribe).
+  const swRef = useRef(sw);
+  const shRef = useRef(sh);
+  swRef.current = sw;
+  shRef.current = sh;
+
+  useEffect(() => {
+    const unsub = usePlayerStore.subscribe((state) => {
+      const px = state.player.x;
+      const py = state.player.y;
+      const halfW = swRef.current / 2;
+      const halfH = shRef.current / 2;
+      const ox = Math.max(0, Math.min(WORLD_W - swRef.current, px - halfW + 20));
+      const oy = Math.max(0, Math.min(WORLD_H - shRef.current, py - halfH + 20));
+      cameraX.setValue(-ox);
+      cameraY.setValue(-oy);
+    });
+    return unsub;
+  }, []); // stable — dépendances via refs
+
+  // ── Systèmes de jeu ─────────────────────────────────────────────────────────
   useRespawn();
-  usePlayerMovement(directionRef, worldBounds);
+  usePlayerMovement(directionRef, { w: WORLD_W, h: WORLD_H });
 
   // Détecte le nœud récoltable le plus proche du joueur.
   const target = useNearestHarvestable();
 
-  const HOUSE_X = SCREEN_WIDTH / 2 - 32;
+  // ── Cycle jour/nuit ─────────────────────────────────────────────────────────
+  const nightOpacity = useDayNightCycle();
 
   return (
     <View style={styles.scene}>
-      {/* ── Couche monde ── */}
-      <View style={StyleSheet.absoluteFill} onLayout={handleWorldLayout}>
+      {/* ── Couche monde (coordonnées monde, décalée par la caméra) ── */}
+      <Animated.View
+        style={[
+          styles.worldLayer,
+          { transform: [{ translateX: cameraX }, { translateY: cameraY }] },
+        ]}
+      >
         {/* Sol */}
         <View style={styles.groundLayer} />
 
         {/* Chemin de terre décoratif */}
-        <View
-          style={[
-            styles.path,
-            { left: SCREEN_WIDTH / 2 - 30, top: HOUSE_Y + 55 },
-          ]}
-        />
+        <View style={[styles.path, { left: HOUSE_X + 2, top: HOUSE_Y + 55 }]} />
 
         {/* Maison */}
         <House x={HOUSE_X} y={HOUSE_Y} />
@@ -134,7 +141,14 @@ export const GameScene: React.FC = () => {
 
         {/* Joueur — z-index 10, pointerEvents="none" interne */}
         <PlayerCharacter />
-      </View>
+      </Animated.View>
+
+      {/* ── Overlay nuit (sous les contrôles, au-dessus du monde) ──
+          pointerEvents="none" : ne capte aucun toucher. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.nightOverlay, { opacity: nightOpacity }]}
+      />
 
       {/* ── Overlay contrôles ──
           pointerEvents="box-none" : le conteneur est transparent aux touches,
@@ -154,6 +168,11 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
+  worldLayer: {
+    position: 'absolute',
+    width: WORLD_W,
+    height: WORLD_H,
+  },
   groundLayer: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#7ec850',
@@ -165,6 +184,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#c2a062',
     borderRadius: 30,
     opacity: 0.5,
+  },
+  nightOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 30, 1)',
   },
   // Overlay full-width en bas : joystick à gauche, bouton action à droite.
   controlsOverlay: {

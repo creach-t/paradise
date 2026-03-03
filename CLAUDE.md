@@ -4,7 +4,7 @@ Ce fichier donne à Claude le contexte nécessaire pour contribuer efficacement 
 
 ## Vision du jeu
 
-**Paradise est un jeu de farming/récolte** (pas de combat, pas de survie hardcore). Le joueur se déplace dans un monde ouvert, récolte des ressources, craft des outils et des matériaux de plus en plus élaborés. La progression est portée par l'**arbre de craft** (plus de recettes = accès à plus de zones et de ressources).
+**Paradise est un jeu de farming/récolte** (pas de combat, pas de survie hardcore). Le joueur se déplace dans un monde ouvert scrollable, récolte des ressources, craft des outils et des matériaux de plus en plus élaborés. La progression est portée par l'**arbre de craft** (plus de recettes = accès à plus de zones et de ressources).
 
 ## Stack
 
@@ -25,6 +25,16 @@ Deux stores séparés, tous deux persistés :
 
 **Import circulaire gameStore ↔ playerStore** : résolu par `require()` dynamique dans les helpers `getEquippedTool()`, `consumePlayerEnergy()` et `addPlayerXp()` — ne jamais faire d'import statique entre ces deux fichiers.
 
+## Monde scrollable
+
+- **`WORLD_W = 800`, `WORLD_H = 1400`** dans `constants/gameConfig.ts`
+- **Caméra** : `Animated.Value` (cameraX/Y) dans `GameScene.tsx`, mise à jour via `usePlayerStore.subscribe()` → `setValue()` — zéro re-render React
+  - `ox = clamp(px - sw/2 + 20, 0, WORLD_W - sw)` (idem Y)
+- **WorldLayer** : `Animated.View` de taille fixe `WORLD_W × WORLD_H` avec `transform: [translateX, translateY]`
+- **usePlayerMovement** reçoit `{ w: WORLD_W, h: WORLD_H }` pour le clamping de la position
+- **House** : position fixe `HOUSE_X = 155, HOUSE_Y = 370` dans `GameScene.tsx` (plus screen-relative)
+- **Spawn** : `SCREEN_W / 2 - 20, 320` dans `playerStore.ts` (compatible sauvegardes)
+
 ## Système d'interaction par proximité
 
 L'utilisateur contrôle le **joueur** (joystick), pas les objets du monde directement.
@@ -33,6 +43,32 @@ L'utilisateur contrôle le **joueur** (joystick), pas les objets du monde direct
 - Détection : `useNearestHarvestable` poll à 150 ms → `HarvestTarget | null` (rayon 80 px)
 - Interaction : `ActionButton` (bas-droite) déclenche `harvestXxx()` du gameStore
 - Les composants nœuds (`Tree`, `Rock`, `Twig`, `PebbleCluster`) sont des **`View` purs** — aucun `TouchableOpacity`
+
+## Cycle jour/nuit
+
+- Hook `hooks/useDayNightCycle.ts` → retourne `Animated.Value` (opacité 0..`NIGHT_MAX_OPACITY`)
+- Constantes dans `gameConfig.ts` : `DAY_CYCLE_MS = 300_000` (5 min), `NIGHT_MAX_OPACITY = 0.62`
+- Formule : `(1 - cos(phase × 2π)) / 2 × MAX` — transition lisse sans palier
+- Tick 1 s, `setValue()` sans re-render React
+- Overlay `rgba(0, 0, 30, 1)` dans `GameScene.tsx`, entre WorldLayer et ControlsOverlay
+
+## HUD
+
+```
+┌────────────────────────────────────────────┐
+│  ☰  │  ⚡ ██████░░  80/100  Lv5  │  🪓   │
+└────────────────────────────────────────────┘
+```
+
+- **☰** (gauche) : ouvre un `Modal` dropdown de navigation (Menu principal / Inventaire / Atelier / Paramètres)
+- **Barre énergie + niveau** (centre, flex: 1)
+- **Slot outil** (droite) : affiche l'outil équipé, clic → Atelier
+- Les ressources ont été retirées du HUD → consultables dans l'Inventaire
+
+## Paramètres
+
+- `screens/SettingsScreen.tsx` : `Alert.alert` de confirmation → `resetGame()` + `resetPlayer()`
+- Route `Settings` dans `AppNavigator.tsx` (slide_from_bottom)
 
 ## Patterns établis
 
@@ -47,7 +83,21 @@ useEffect(() => {
   return () => clearInterval(id);
 }, []); // stable, jamais recréé
 ```
-Appliqué dans : `useRespawn`, `usePlayerMovement`, `useNearestHarvestable`.
+Appliqué dans : `useRespawn`, `usePlayerMovement`, `useNearestHarvestable`, `useDayNightCycle`.
+
+### Caméra (zéro re-render)
+```typescript
+// Dans GameScene, abonnement playerStore → Animated.Value.setValue()
+useEffect(() => {
+  const unsub = usePlayerStore.subscribe((state) => {
+    const ox = Math.max(0, Math.min(WORLD_W - sw, state.player.x - sw / 2 + 20));
+    const oy = Math.max(0, Math.min(WORLD_H - sh, state.player.y - sh / 2 + 20));
+    cameraX.setValue(-ox);
+    cameraY.setValue(-oy);
+  });
+  return unsub;
+}, []);
+```
 
 ### Récolte + énergie + XP
 Chaque action `harvest` du gameStore :
@@ -61,23 +111,26 @@ Coûts énergie : `HARVEST_ENERGY_HAND = 1` (brindilles, galets) · `HARVEST_ENE
 XP : `XP_TWIG = 5` · `XP_PEBBLE = 5` · `XP_TREE = 15` · `XP_ROCK = 15`
 
 ### Persist — migration des sauvegardes
-Le store `gameStore` utilise un `merge` personnalisé pour éviter le bug `NaN` :
+Le `merge` de `gameStore` gère deux niveaux de compatibilité ascendante :
+
 ```typescript
-merge: (persistedState, currentState) => ({
-  ...currentState,
-  ...persistedState,
-  resources: {
-    ...currentState.resources,          // valeurs par défaut (0) pour toutes les clés
-    ...(persistedState.resources ?? {}), // valeurs persistées écrasent si présentes
-  },
-})
+merge: (persistedState, currentState) => {
+  // 1. Resources : deep merge → nouvelles clés tombent à 0
+  // 2. Nœuds : on conserve l'état persisté ET on ajoute les nouveaux nœuds
+  function mergeNodes(persisted, current) {
+    const knownIds = new Set(persisted.map(n => n.id));
+    return [...persisted, ...current.filter(n => !knownIds.has(n.id))];
+  }
+  return { ...currentState, ...ps, resources: {...}, trees: mergeNodes(...), ... };
+}
 ```
-**À reproduire à chaque ajout de clé dans `ResourceInventory`** — ce merge garantit la compatibilité ascendante.
+**À reproduire à chaque ajout de clé dans `ResourceInventory` ou de nœuds dans `INITIAL_*`.**
 
 ### Navigation
 - `initialRouteName: 'MainMenu'`
-- Stack : `MainMenu` ← → `Game` ← → `Craft` (slide_from_bottom) / `Inventory` (slide_from_bottom)
-- Types de routes dans `RootStackParamList` (AppNavigator.tsx)
+- Stack : `MainMenu` ↔ `Game` ↔ `Craft` / `Inventory` / `Settings` (slide_from_bottom)
+- Depuis le jeu : menu hamburger ☰ dans le HUD → `Modal` dropdown
+- Types de routes dans `RootStackParamList` (`AppNavigator.tsx`)
 
 ### Composants monde
 - `position: 'absolute'`, coordonnées depuis `gameConfig.ts`
@@ -97,8 +150,7 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 1. Ajouter la clé dans `ResourceInventory` (`types/index.ts`)
 2. Initialiser à `0` dans `initialResources` (`gameStore.ts`)
 3. Ajouter les métadonnées dans `RESOURCE_META` (`InventoryScreen.tsx`)
-4. Ajouter l'emoji dans `HUD.tsx`
-5. ✅ Le `merge` du persist gère la compatibilité des sauvegardes existantes
+4. ✅ Le `merge` du persist gère la compatibilité des sauvegardes existantes
 
 ### Ajouter une recette de craft
 - Ajouter un objet dans `CRAFT_RECIPES` (`constants/craftRecipes.ts`) — c'est tout.
@@ -113,12 +165,16 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 7. Ajouter l'emoji + label dans `ActionButton.tsx`
 8. Monter le composant dans `GameScene.tsx` avec `isHighlighted={target?.id === node.id}`
 
+### Ajouter des positions de nœuds dans le monde
+- Ajouter les entrées dans `INITIAL_TREES` / `INITIAL_ROCKS` / etc. (`gameConfig.ts`)
+- Le `merge` de Zustand les injecte automatiquement dans les sauvegardes existantes (nouveaux IDs uniquement)
+
 ## Roadmap farming (par milestone)
 
-### M1 — Fondations manquantes
-- [ ] Monde scrollable — caméra suit le joueur (offset absolu ou ScrollView)
-- [ ] Cycle jour/nuit — timer + assombrissement de la scène (rythme farming, pas danger)
-- [ ] Paramètres — son, reset save (SettingsScreen)
+### M1 — Fondations ✅
+- [x] Monde scrollable — WORLD_W=800 × WORLD_H=1400, caméra Animated.Value centrée joueur
+- [x] Cycle jour/nuit — useDayNightCycle (5 min, overlay rgba(0,0,30,1) + formule cosinus)
+- [x] Paramètres — SettingsScreen (reset sauvegarde via Alert de confirmation)
 
 ### M2 — Farming core
 - [ ] Potager — planter des graines → croissance (timer) → récolter (nouveau type de nœud)
@@ -152,7 +208,7 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 - Le projet tourne sur **Expo Go 55.x** — les modules natifs custom nécessitent un dev build
 - Node.js >= 20.19.4 requis (SDK 55 / metro 0.83)
 - `useWindowDimensions()` dans GameScene (pas `Dimensions.get` au module level)
-- `SPAWN_X/Y` dans `playerStore.ts` est calculé au module level avec `Dimensions.get()` — OK en portrait fixe, à corriger si orientation libre
+- `SPAWN_X/Y` dans `playerStore.ts` est calculé au module level avec `Dimensions.get()` — OK en portrait fixe
 
 ## Commandes utiles
 

@@ -104,10 +104,7 @@ export const MainMenuScreen: React.FC = () => {
           />
           <MenuButton
             label="⚙️  Paramètres"
-            onPress={() => {
-              // TODO : implémenter SettingsScreen (son, langue, reset)
-            }}
-            disabled
+            onPress={() => navigation.navigate('Settings')}
           />
         </View>
 
