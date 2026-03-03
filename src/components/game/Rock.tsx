@@ -1,41 +1,41 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Image, Text, StyleSheet } from 'react-native';
 import { RockNode } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 
 interface RockProps {
   rock: RockNode;
-  /** Surbrillance — vrai si ce nœud est la cible d'interaction courante. */
   isHighlighted?: boolean;
 }
 
-/**
- * Gros rocher récoltable — composant d'affichage pur (aucun TouchableOpacity).
- * La récolte est déclenchée par ActionButton quand le joueur est à portée.
- *
- * ─── États visuels ────────────────────────────────────────────────────────────
- *  🪨 Normal       — disponible
- *  🪨⛏️ Verrouillé  — pioche manquante → badge indicateur
- *  🪨✨ En surbrillance — joueur à portée, sélectionné par useNearestHarvestable
- *  💨  Récolté      — en attente de respawn
- */
+const getFlipX = (x: number, y: number) =>
+  (Math.floor(x / 50) + Math.floor(y / 70)) % 2 === 0;
+
 export const Rock: React.FC<RockProps> = ({ rock, isHighlighted = false }) => {
   const equippedTool = usePlayerStore((s) => s.equippedTool);
   const showLockBadge = !rock.isHarvested && equippedTool !== 'stone_pickaxe';
+
+  const flipX = getFlipX(rock.x, rock.y);
 
   return (
     <View
       style={[
         styles.container,
         { left: rock.x, top: rock.y },
-        rock.isHarvested && styles.harvested,
         isHighlighted && styles.highlighted,
       ]}
       pointerEvents="none"
     >
-      <Text style={styles.emoji}>{rock.isHarvested ? '💨' : '🪨'}</Text>
+      <Image
+        source={
+          rock.isHarvested
+            ? require('../../../assets/rock_mined.png')
+            : require('../../../assets/rock.png')
+        }
+        style={[styles.image, flipX && styles.flipped]}
+        resizeMode="contain"
+      />
 
-      {/* Badge "outil requis" — visible seulement si pas encore équipé */}
       {showLockBadge && (
         <View style={styles.lockBadge}>
           <Text style={styles.lockText}>⛏️</Text>
@@ -48,22 +48,20 @@ export const Rock: React.FC<RockProps> = ({ rock, isHighlighted = false }) => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    width: 48,
-    height: 48,
+    width: 72,
+    height: 72,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emoji: {
-    fontSize: 32,
-    textShadowColor: 'rgba(0,0,0,0.25)',
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 2,
+  image: {
+    width: '100%',
+    height: '100%',
   },
-  harvested: {
-    opacity: 0.22,
+  flipped: {
+    transform: [{ scaleX: -1 }],
   },
   highlighted: {
-    borderRadius: 24,
+    borderRadius: 26,
     backgroundColor: 'rgba(126,200,80,0.22)',
   },
   lockBadge: {

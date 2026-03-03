@@ -17,66 +17,35 @@ export const NIGHT_MAX_OPACITY = 0.62;
 // ─── Timings ──────────────────────────────────────────────────────────────────
 
 export const GAME_CONFIG = {
-  /** Délai de respawn d'un arbre (ms). */
-  TREE_RESPAWN_DELAY: 12_000,
-  /** Délai de respawn d'un rocher (ms). */
-  ROCK_RESPAWN_DELAY: 18_000,
-  /** Délai de respawn d'un buisson de brindilles (ms). */
-  TWIG_RESPAWN_DELAY: 6_000,
-  /** Délai de respawn d'un tas de galets (ms). */
-  PEBBLE_RESPAWN_DELAY: 8_000,
-
-  /** Bois récolté par coup de hache. */
-  WOOD_PER_TAP: 2,
-  /** Pierre récoltée par coup de pioche. */
-  STONE_PER_TAP: 2,
-  /** Brindilles récoltées à la main par buisson. */
-  BRANCH_PER_TAP: 1,
-  /** Galets récoltés à la main par tas. */
-  PEBBLE_PER_TAP: 1,
-
-  /** Intervalle de vérification des respawns (ms). */
-  RESPAWN_TICK: 1_000,
-
-  // ── Coûts en énergie ──────────────────────────────────────────────────────
-  /** Énergie consommée pour récolter à la main (buissons, galets). */
-  HARVEST_ENERGY_HAND: 1,
-  /** Énergie consommée pour récolter avec un outil (arbres, rochers). */
-  HARVEST_ENERGY_TOOL: 2,
-
-  // ── XP par récolte ────────────────────────────────────────────────────────
-  /** XP gagnée en récoltant un buisson de brindilles. */
-  XP_TWIG: 5,
-  /** XP gagnée en récoltant un tas de galets. */
-  XP_PEBBLE: 5,
-  /** XP gagnée en coupant un arbre. */
-  XP_TREE: 15,
-  /** XP gagnée en minant un rocher. */
-  XP_ROCK: 15,
-  /** XP gagnée en récoltant une culture du potager. */
-  XP_GARDEN_HARVEST: 10,
-
-  // ── Potager (M2) ──────────────────────────────────────────────────────────
-  /** Énergie consommée pour planter / arroser / récolter sur le potager. */
-  HARVEST_ENERGY_GARDEN: 1,
-  /** Réduction du temps de pousse par arrosage (ms). */
-  WATERED_REDUCTION_MS: 15_000,
-  /** Cooldown de la source d'eau (ms). */
+  TREE_RESPAWN_DELAY:         12_000,
+  ROCK_RESPAWN_DELAY:         18_000,
+  TWIG_RESPAWN_DELAY:          6_000,
+  PEBBLE_RESPAWN_DELAY:        8_000,
+  WOOD_PER_TAP:                    2,
+  STONE_PER_TAP:                   2,
+  BRANCH_PER_TAP:                  1,
+  PEBBLE_PER_TAP:                  1,
+  RESPAWN_TICK:                1_000,
+  HARVEST_ENERGY_HAND:             1,
+  HARVEST_ENERGY_TOOL:             2,
+  XP_TWIG:                         5,
+  XP_PEBBLE:                       5,
+  XP_TREE:                        15,
+  XP_ROCK:                        15,
+  XP_GARDEN_HARVEST:              10,
+  HARVEST_ENERGY_GARDEN:           1,
+  WATERED_REDUCTION_MS:       15_000,
   WATER_SOURCE_RESPAWN_DELAY: 10_000,
-  /** Eau collectée par interaction avec la source. */
-  WATER_PER_TAP: 2,
+  WATER_PER_TAP:                   2,
 } as const;
 
 // ─── Temps de pousse par graine (ms) ──────────────────────────────────────────
 
 export const GROWTH_BASE_MS: Record<SeedType, number> = {
-  berry_seed:    30_000, // 30 s — pousse rapide
-  grain_seed:    60_000, // 60 s — pousse moyenne
-  mushroom_seed: 90_000, // 90 s — pousse lente mais rentable
+  berry_seed:    30_000,
+  grain_seed:    60_000,
+  mushroom_seed: 90_000,
 };
-
-// ─── Rendement par graine ──────────────────────────────────────────────────────
-// La récolte retourne toujours 1 graine + N ressources du type cultivé.
 
 export const CROP_YIELD: Record<SeedType, { resource: 'berry' | 'grain' | 'mushroom'; amount: number }> = {
   berry_seed:    { resource: 'berry',    amount: 3 },
@@ -86,15 +55,30 @@ export const CROP_YIELD: Record<SeedType, { resource: 'berry' | 'grain' | 'mushr
 
 // ─── Disposition initiale du monde ────────────────────────────────────────────
 //
-// Coordonnées pensées pour un écran ~375px large.
-// La maison est positionnée dynamiquement dans GameScene.
+// Monde 800 × 1400 px. Maison à (155, 370).
 //
-// ┌──────────────────────────────────────────────────────────────┐
-// │ 🌲🌲🌲  forêt dense          🌿🌿  buissons  ⚫⚫ galets   │
-// │ 🌲🌲🌲  (haut-gauche)        🌿             ⚫  🪨🪨 rochers│
-// │ 🌲🌲🌲                                       🪨🪨          │
-// │                        🏠 maison                            │
-// └──────────────────────────────────────────────────────────────┘
+// Espacement garanti (aucun chevauchement) :
+//   Tree  76 px → distance min entre arbres ≥ 84 px
+//   Rock  72 px → distance min entre rochers ≥ 80 px
+//   Twig  62 px → distance min entre buissons ≥ 68 px
+//   Pebble 68 px → distance min entre galets ≥ 74 px
+//   Cross-type : distance min ≥ (sizeA + sizeB) / 2
+//
+// Zones sans chevauchement :
+//   NW   Forêt  x[12-171]  y[15-176]  → arbres seulement
+//   Lisière     x[185-247] y[70-308]  → buissons seulement
+//   CN   Rochers x[255-412] y[60-222] → rochers + galets (intercalés)
+//   NE   Bosquet x[605-771] y[15-91]  → arbres seulement
+//   EFalaises x[555-717] y[60-230]    → rochers seulement
+//   ECentre x[495-676] y[300-376]     → arbres seulement
+//   SW   Forêt  x[15-176]  y[515-686] → arbres seulement
+//   SE   Rochers x[570-732] y[580-657] → rochers seulement
+//   Deep Bosquet x[255-431] y[835-1001] → arbres seulement
+//   Mines x[500-667] y[935-1017]      → rochers seulement
+//   Oubliée x[85-361] y[1130-1216]    → arbres seulement
+//
+// 'tree_*' → tree.png / tree_cut.png
+// 'trio_*' → trio-tree.png / trio-tree_cut.png
 
 type InitialTree        = Pick<TreeNode,        'id' | 'x' | 'y' | 'type'>;
 type InitialRock        = Pick<RockNode,        'id' | 'x' | 'y' | 'type'>;
@@ -103,96 +87,89 @@ type InitialPebble      = Pick<PebbleNode,      'id' | 'x' | 'y' | 'type'>;
 type InitialGardenBed   = Pick<GardenBedNode,   'id' | 'x' | 'y' | 'type'>;
 type InitialWaterSource = Pick<WaterSourceNode, 'id' | 'x' | 'y' | 'type'>;
 
-// ─── Forêt dense (cluster haut-gauche) ────────────────────────────────────────
-// Arbres espacés de ~38px centre-à-centre : chevauchement visuel intentionnel.
-// Sprite 52×52 px — la forêt occupe ~150px × 180px.
+// ─── Arbres — distance min entre arbres : 84 px ───────────────────────────────
 
 export const INITIAL_TREES: InitialTree[] = [
-  // Rangée 0 (y ≈ 15)
-  { id: 'tree_1',  type: 'tree', x: 8,   y: 15  },
-  { id: 'tree_2',  type: 'tree', x: 48,  y: 8   },
-  { id: 'tree_3',  type: 'tree', x: 88,  y: 20  },
-  // Rangée 1 (y ≈ 55)
-  { id: 'tree_4',  type: 'tree', x: 18,  y: 55  },
-  { id: 'tree_5',  type: 'tree', x: 60,  y: 48  },
-  { id: 'tree_6',  type: 'tree', x: 100, y: 60  },
-  // Rangée 2 (y ≈ 100)
-  { id: 'tree_7',  type: 'tree', x: 10,  y: 100 },
-  { id: 'tree_8',  type: 'tree', x: 52,  y: 95  },
-  { id: 'tree_9',  type: 'tree', x: 92,  y: 108 },
-  // Lisière (arbres isolés)
-  { id: 'tree_10', type: 'tree', x: 34,  y: 148 },
-  { id: 'tree_11', type: 'tree', x: 118, y: 40  },
 
-  // ─── Forêt du sud (cluster bas-gauche) ────────────────────────────────────
-  { id: 'tree_12', type: 'tree', x: 30,  y: 540 },
-  { id: 'tree_13', type: 'tree', x: 70,  y: 520 },
-  { id: 'tree_14', type: 'tree', x: 110, y: 555 },
-  { id: 'tree_15', type: 'tree', x: 50,  y: 600 },
-  { id: 'tree_16', type: 'tree', x: 90,  y: 585 },
-  { id: 'tree_17', type: 'tree', x: 130, y: 615 },
+  // ── Forêt Nord-Ouest — grille 2×2, pas de 83 px ──────────────────────────
+  { id: 'trio_1', type: 'tree', x: 12,  y: 15  }, // box [12-88,  15-91]
+  { id: 'tree_1', type: 'tree', x: 95,  y: 15  }, // box [95-171, 15-91]  | dist trio_1→ 83 ✓
+  { id: 'trio_2', type: 'tree', x: 12,  y: 100 }, // box [12-88,  100-176] | dist trio_1→ 85 ✓
+  { id: 'tree_2', type: 'tree', x: 95,  y: 100 }, // box [95-171, 100-176] | dist tous → 83-85 ✓
 
-  // ─── Bosquet profond (exploration lointaine) ───────────────────────────────
-  { id: 'tree_18', type: 'tree', x: 340, y: 880 },
-  { id: 'tree_19', type: 'tree', x: 385, y: 855 },
-  { id: 'tree_20', type: 'tree', x: 425, y: 895 },
-  { id: 'tree_21', type: 'tree', x: 360, y: 940 },
-  { id: 'tree_22', type: 'tree', x: 400, y: 965 },
+  // ── Bosquet Nord-Est ──────────────────────────────────────────────────────
+  { id: 'tree_3', type: 'tree', x: 605, y: 15  }, // box [605-681, 15-91]
+  { id: 'trio_3', type: 'tree', x: 695, y: 15  }, // box [695-771, 15-91]  | dist → 90 ✓
+
+  // ── Lisière Est (deux arbres isolés près des falaises) ───────────────────
+  { id: 'trio_4', type: 'tree', x: 495, y: 300 }, // box [495-571, 300-376]
+  { id: 'tree_4', type: 'tree', x: 600, y: 300 }, // box [600-676, 300-376] | dist → 105 ✓
+
+  // ── Forêt Sud-Ouest — grille 2×2, pas de 85-90 px ────────────────────────
+  { id: 'tree_5',  type: 'tree', x: 15,  y: 515 }, // box [15-91,  515-591]
+  { id: 'trio_5',  type: 'tree', x: 100, y: 515 }, // box [100-176, 515-591] | dist → 85 ✓
+  { id: 'tree_6',  type: 'tree', x: 15,  y: 605 }, // box [15-91,  605-681] | dist tree_5→ 90 ✓
+  { id: 'trio_6',  type: 'tree', x: 100, y: 610 }, // box [100-176, 610-686] | dist trio_5→ 95 ✓
+
+  // ── Bosquet mystérieux — triangle, pas de 100 px ─────────────────────────
+  { id: 'trio_7', type: 'tree', x: 255, y: 835 }, // box [255-331, 835-911]
+  { id: 'tree_7', type: 'tree', x: 355, y: 835 }, // box [355-431, 835-911] | dist → 100 ✓
+  { id: 'trio_8', type: 'tree', x: 305, y: 925 }, // box [305-381, 925-1001]| dist trio_7→ 103, tree_7→ 103 ✓
+
+  // ── Forêt oubliée — ligne de 3 ───────────────────────────────────────────
+  { id: 'tree_8', type: 'tree', x: 85,  y: 1130 }, // box [85-161,  1130-1206]
+  { id: 'trio_9', type: 'tree', x: 185, y: 1135 }, // box [185-261, 1135-1211]| dist → 100 ✓
+  { id: 'tree_9', type: 'tree', x: 285, y: 1140 }, // box [285-361, 1140-1216]| dist → 100 ✓
 ];
 
-// ─── Rochers (cluster haut-droit) ─────────────────────────────────────────────
+// ─── Rochers — distance min entre rochers : 80 px ────────────────────────────
 
 export const INITIAL_ROCKS: InitialRock[] = [
-  { id: 'rock_1', type: 'rock', x: 270, y: 65  },
-  { id: 'rock_2', type: 'rock', x: 308, y: 95  },
-  { id: 'rock_3', type: 'rock', x: 260, y: 128 },
-  { id: 'rock_4', type: 'rock', x: 302, y: 152 },
-  { id: 'rock_5', type: 'rock', x: 273, y: 182 },
 
-  // ─── Rochers de l'est (monde étendu) ──────────────────────────────────────
-  { id: 'rock_6',  type: 'rock', x: 560, y: 130 },
-  { id: 'rock_7',  type: 'rock', x: 600, y: 165 },
-  { id: 'rock_8',  type: 'rock', x: 640, y: 105 },
-  { id: 'rock_9',  type: 'rock', x: 580, y: 210 },
+  // ── Centre-Nord — grille 2×2, pas de 85 px ───────────────────────────────
+  { id: 'rock_1', type: 'rock', x: 255, y: 60  }, // box [255-327, 60-132]
+  { id: 'rock_2', type: 'rock', x: 340, y: 60  }, // box [340-412, 60-132]  | dist → 85 ✓
+  { id: 'rock_3', type: 'rock', x: 255, y: 150 }, // box [255-327, 150-222] | dist rock_1→ 90 ✓
+  { id: 'rock_4', type: 'rock', x: 340, y: 150 }, // box [340-412, 150-222] | dist tous → 85-90 ✓
 
-  // ─── Rochers profonds (exploration lointaine) ─────────────────────────────
-  { id: 'rock_10', type: 'rock', x: 580, y: 790 },
-  { id: 'rock_11', type: 'rock', x: 625, y: 830 },
-  { id: 'rock_12', type: 'rock', x: 600, y: 875 },
+  // ── Falaises Est — grille 2×2 ─────────────────────────────────────────────
+  { id: 'rock_5', type: 'rock', x: 555, y: 60  }, // box [555-627, 60-132]
+  { id: 'rock_6', type: 'rock', x: 645, y: 60  }, // box [645-717, 60-132]  | dist → 90 ✓
+  { id: 'rock_7', type: 'rock', x: 555, y: 155 }, // box [555-627, 155-227] | dist rock_5→ 95 ✓
+  { id: 'rock_8', type: 'rock', x: 645, y: 155 }, // box [645-717, 155-227] | dist tous → 90-95 ✓
+
+  // ── Sud-Est — paire ───────────────────────────────────────────────────────
+  { id: 'rock_9',  type: 'rock', x: 570, y: 580 }, // box [570-642, 580-652]
+  { id: 'rock_10', type: 'rock', x: 660, y: 580 }, // box [660-732, 580-652] | dist → 90 ✓
+
+  // ── Mines profondes — paire ───────────────────────────────────────────────
+  { id: 'rock_11', type: 'rock', x: 500, y: 935 }, // box [500-572, 935-1007]
+  { id: 'rock_12', type: 'rock', x: 595, y: 935 }, // box [595-667, 935-1007]| dist → 95 ✓
 ];
 
-// ─── Buissons de brindilles (zone centrale) ───────────────────────────────────
-// Récoltés à la main — placés entre la forêt et la maison.
+// ─── Buissons — distance min entre buissons : 68 px ──────────────────────────
+// Zone dédiée x[185-247] — aucun arbre dans cette bande (arbres NW finissent à x=171)
 
 export const INITIAL_TWIGS: InitialTwig[] = [
-  { id: 'twig_1', type: 'twig', x: 148, y: 75  },
-  { id: 'twig_2', type: 'twig', x: 175, y: 145 },
-  { id: 'twig_3', type: 'twig', x: 138, y: 208 },
-  { id: 'twig_4', type: 'twig', x: 192, y: 65  },
-
-  // ─── Buissons du sud (monde étendu) ───────────────────────────────────────
-  { id: 'twig_5', type: 'twig', x: 255, y: 475 },
-  { id: 'twig_6', type: 'twig', x: 320, y: 530 },
-  { id: 'twig_7', type: 'twig', x: 185, y: 570 },
-  { id: 'twig_8', type: 'twig', x: 380, y: 445 },
+  { id: 'twig_1', type: 'twig', x: 185, y: 70  }, // box [185-247, 70-132]
+  { id: 'twig_2', type: 'twig', x: 185, y: 155 }, // box [185-247, 155-217]| dist twig_1→ 85 ✓
+  { id: 'twig_3', type: 'twig', x: 185, y: 240 }, // box [185-247, 240-302]| dist twig_2→ 85 ✓
+  { id: 'twig_4', type: 'twig', x: 385, y: 285 }, // box [385-447, 285-347]| isolé ✓
+  { id: 'twig_5', type: 'twig', x: 172, y: 730 }, // box [172-234, 730-792]| isolé ✓
+  { id: 'twig_6', type: 'twig', x: 215, y: 918 }, // box [215-277, 918-980]| dist twig_5→ sqrt(43²+188²)=193 ✓
 ];
 
-// ─── Tas de petits galets (zone centrale-droite) ──────────────────────────────
-// Récoltés à la main — zone entre les rochers et la maison.
+// ─── Galets — distance min entre galets : 74 px ───────────────────────────────
+// Intercalés entre les rochers CN (x[255-412]) — décalés vers la droite
 
 export const INITIAL_PEBBLES: InitialPebble[] = [
-  { id: 'pbl_1', type: 'pebble_cluster', x: 226, y: 82  },
-  { id: 'pbl_2', type: 'pebble_cluster', x: 240, y: 162 },
-  { id: 'pbl_3', type: 'pebble_cluster', x: 218, y: 238 },
-
-  // ─── Galets du sud-est (monde étendu) ─────────────────────────────────────
-  { id: 'pbl_4', type: 'pebble_cluster', x: 455, y: 380 },
-  { id: 'pbl_5', type: 'pebble_cluster', x: 500, y: 460 },
-  { id: 'pbl_6', type: 'pebble_cluster', x: 540, y: 340 },
+  { id: 'pbl_1', type: 'pebble_cluster', x: 265, y: 238 }, // box [265-333, 238-306]| sous rock_3, gap Y=16 ✓
+  { id: 'pbl_2', type: 'pebble_cluster', x: 350, y: 245 }, // box [350-418, 245-313]| dist pbl_1→ 86 ✓
+  { id: 'pbl_3', type: 'pebble_cluster', x: 435, y: 175 }, // box [435-503, 175-243]| isolé à l'est des rochers CN ✓
+  { id: 'pbl_4', type: 'pebble_cluster', x: 488, y: 398 }, // box [488-556, 398-466]| isolé ✓
 ];
 
-// ─── Lits de potager (M2) — à droite de la maison (HOUSE_X=155, HOUSE_Y=370) ──
-// 4 lits en grille 2×2, espacés de 54 px (sprite 48 px + 6 px de marge).
+// ─── Lits de potager (M2) ─────────────────────────────────────────────────────
 
 export const INITIAL_GARDEN_BEDS: InitialGardenBed[] = [
   { id: 'gbed_1', type: 'gardenBed', x: 255, y: 355 },
@@ -201,7 +178,7 @@ export const INITIAL_GARDEN_BEDS: InitialGardenBed[] = [
   { id: 'gbed_4', type: 'gardenBed', x: 309, y: 409 },
 ];
 
-// ─── Source d'eau (M2) — mare à l'est ─────────────────────────────────────────
+// ─── Source d'eau (M2) ────────────────────────────────────────────────────────
 
 export const INITIAL_WATER_SOURCES: InitialWaterSource[] = [
   { id: 'wsrc_1', type: 'waterSource', x: 490, y: 470 },

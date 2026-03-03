@@ -26,7 +26,7 @@ export interface HarvestTarget {
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
 /** Distance centre-à-centre (px) en dessous de laquelle un nœud est accessible. */
-const INTERACT_RANGE = 80;
+const INTERACT_RANGE = 25;
 
 /** Fréquence de polling (ms). */
 const POLL_MS = 150;
@@ -35,10 +35,10 @@ const POLL_MS = 150;
  * Demi-taille de chaque sprite pour calculer son centre depuis la position top-left.
  */
 const SPRITE_HALF: Record<HarvestableType, number> = {
-  tree:           26, // container 52 px
-  rock:           24, // container 48 px
-  twig:           19, // container 38 px
-  pebble_cluster: 17, // container 34 px
+  tree:           38, // container 76 px
+  rock:           36, // container 72 px
+  twig:           31, // container 62 px
+  pebble_cluster: 34, // container 68 px
   garden_bed:     24, // container 48 px
   water_source:   28, // container 56 px
 };

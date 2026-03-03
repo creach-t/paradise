@@ -1,41 +1,46 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Image, Text, StyleSheet } from 'react-native';
 import { TreeNode } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 
 interface TreeProps {
   tree: TreeNode;
-  /** Surbrillance — vrai si ce nœud est la cible d'interaction courante. */
   isHighlighted?: boolean;
 }
 
-/**
- * Arbre récoltable — composant d'affichage pur (aucun TouchableOpacity).
- * La récolte est déclenchée par ActionButton quand le joueur est à portée.
- *
- * ─── États visuels ────────────────────────────────────────────────────────────
- *  🌲 Normal       — disponible
- *  🌲🪓 Verrouillé  — hache manquante → badge indicateur
- *  🌲✨ En surbrillance — joueur à portée, sélectionné par useNearestHarvestable
- *  🪵  Récolté      — en attente de respawn (très transparent)
- */
+// Flip déterministe basé sur la position — alterne visuellement sans rand()
+const getFlipX = (x: number, y: number) =>
+  (Math.floor(x / 45) + Math.floor(y / 65)) % 2 === 0;
+
 export const Tree: React.FC<TreeProps> = ({ tree, isHighlighted = false }) => {
   const equippedTool = usePlayerStore((s) => s.equippedTool);
   const showLockBadge = !tree.isHarvested && equippedTool !== 'wooden_axe';
+
+  const isTrio = tree.id.startsWith('trio_');
+  const flipX  = getFlipX(tree.x, tree.y);
+
+  const normalSrc   = isTrio
+    ? require('../../../assets/trio-tree.png')
+    : require('../../../assets/tree.png');
+  const harvestedSrc = isTrio
+    ? require('../../../assets/trio-tree_cut.png')
+    : require('../../../assets/tree_cut.png');
 
   return (
     <View
       style={[
         styles.container,
         { left: tree.x, top: tree.y },
-        tree.isHarvested && styles.harvested,
         isHighlighted && styles.highlighted,
       ]}
       pointerEvents="none"
     >
-      <Text style={styles.emoji}>{tree.isHarvested ? '🪵' : '🌲'}</Text>
+      <Image
+        source={tree.isHarvested ? harvestedSrc : normalSrc}
+        style={[styles.image, flipX && styles.flipped]}
+        resizeMode="contain"
+      />
 
-      {/* Badge "outil requis" — visible seulement si pas encore équipé */}
       {showLockBadge && (
         <View style={styles.lockBadge}>
           <Text style={styles.lockText}>🪓</Text>
@@ -48,22 +53,20 @@ export const Tree: React.FC<TreeProps> = ({ tree, isHighlighted = false }) => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    width: 52,
-    height: 52,
+    width: 76,
+    height: 76,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emoji: {
-    fontSize: 38,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 3,
+  image: {
+    width: '100%',
+    height: '100%',
   },
-  harvested: {
-    opacity: 0.28,
+  flipped: {
+    transform: [{ scaleX: -1 }],
   },
   highlighted: {
-    borderRadius: 26,
+    borderRadius: 28,
     backgroundColor: 'rgba(126,200,80,0.22)',
   },
   lockBadge: {

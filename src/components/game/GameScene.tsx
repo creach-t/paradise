@@ -19,29 +19,9 @@ import { PlayerCharacter } from './PlayerCharacter';
 import { VirtualJoystick } from './VirtualJoystick';
 import { ActionButton } from './ActionButton';
 
-// ─── Position fixe de la maison dans l'espace monde ───────────────────────────
 const HOUSE_X = 155;
 const HOUSE_Y = 370;
 
-/**
- * Scène principale du jeu.
- *
- * ─── Architecture ─────────────────────────────────────────────────────────────
- *
- * GameScene (flex: 1, overflow: hidden)
- * ├── WorldLayer (Animated.View, WORLD_W × WORLD_H)  ← objets monde + joueur
- * │     translateX/Y = caméra centrée sur le joueur, clampée aux bords du monde
- * ├── NightOverlay (absoluteFill, pointerEvents none) ← cycle jour/nuit
- * └── ControlsOverlay (absolute, bottom)              ← joystick + ActionButton
- *
- * ─── Caméra ───────────────────────────────────────────────────────────────────
- * Abonnement au playerStore (subscribe) → mise à jour de cameraX/Y via
- * Animated.Value.setValue() → zéro re-render React pour le déplacement.
- *
- * ─── Cycle jour/nuit ──────────────────────────────────────────────────────────
- * useDayNightCycle() retourne un Animated.Value (opacité 0..NIGHT_MAX_OPACITY)
- * appliqué sur un overlay plein-écran rgba(0, 0, 30, 1) via interpolation.
- */
 export const GameScene: React.FC = () => {
   const { width: sw, height: sh } = useWindowDimensions();
 
@@ -52,14 +32,11 @@ export const GameScene: React.FC = () => {
   const gardenBeds   = useGameStore((s) => s.gardenBeds);
   const waterSources = useGameStore((s) => s.waterSources);
 
-  // Direction du joystick — ref partagée, 0 re-render.
   const directionRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
 
-  // ── Caméra (Animated.Value — mise à jour sans re-render) ────────────────────
   const cameraX = useRef(new Animated.Value(0)).current;
   const cameraY = useRef(new Animated.Value(0)).current;
 
-  // Refs pour les dimensions écran (stables dans le callback subscribe).
   const swRef = useRef(sw);
   const shRef = useRef(sh);
   swRef.current = sw;
@@ -77,21 +54,46 @@ export const GameScene: React.FC = () => {
       cameraY.setValue(-oy);
     });
     return unsub;
-  }, []); // stable — dépendances via refs
+  }, []);
 
-  // ── Systèmes de jeu ─────────────────────────────────────────────────────────
   useRespawn();
   usePlayerMovement(directionRef, { w: WORLD_W, h: WORLD_H });
 
-  // Détecte le nœud récoltable le plus proche du joueur.
   const target = useNearestHarvestable();
-
-  // ── Cycle jour/nuit ─────────────────────────────────────────────────────────
   const nightOpacity = useDayNightCycle();
+
+  // ── Depth sort — tous les objets du monde triés par Y ───────────────────────
+  // Plus Y est grand (bas de l'écran) → rendu en dernier → passe devant.
+  const depthSorted = [
+    ...trees.map(t => ({
+      y: t.y,
+      el: <Tree key={t.id} tree={t} isHighlighted={target?.id === t.id} />,
+    })),
+    ...rocks.map(r => ({
+      y: r.y,
+      el: <Rock key={r.id} rock={r} isHighlighted={target?.id === r.id} />,
+    })),
+    ...twigs.map(t => ({
+      y: t.y,
+      el: <Twig key={t.id} twig={t} isHighlighted={target?.id === t.id} />,
+    })),
+    ...pebbles.map(p => ({
+      y: p.y,
+      el: <PebbleCluster key={p.id} pebble={p} isHighlighted={target?.id === p.id} />,
+    })),
+    ...gardenBeds.map(b => ({
+      y: b.y,
+      el: <GardenBed key={b.id} bed={b} isHighlighted={target?.id === b.id} />,
+    })),
+    ...waterSources.map(s => ({
+      y: s.y,
+      el: <WaterSource key={s.id} node={s} isHighlighted={target?.id === s.id} />,
+    })),
+    { y: HOUSE_Y, el: <House key="house" x={HOUSE_X} y={HOUSE_Y} /> },
+  ].sort((a, b) => a.y - b.y);
 
   return (
     <View style={styles.scene}>
-      {/* ── Couche monde (coordonnées monde, décalée par la caméra) ── */}
       <Animated.View
         style={[
           styles.worldLayer,
@@ -101,80 +103,21 @@ export const GameScene: React.FC = () => {
         {/* Sol */}
         <View style={styles.groundLayer} />
 
-        {/* Chemin de terre décoratif */}
+        {/* Chemin de terre */}
         <View style={[styles.path, { left: HOUSE_X + 2, top: HOUSE_Y + 55 }]} />
 
-        {/* Maison */}
-        <House x={HOUSE_X} y={HOUSE_Y} />
+        {/* Objets du monde — triés par Y (haut = derrière, bas = devant) */}
+        {depthSorted.map(item => item.el)}
 
-        {/* Arbres */}
-        {trees.map((tree) => (
-          <Tree
-            key={tree.id}
-            tree={tree}
-            isHighlighted={target?.id === tree.id}
-          />
-        ))}
-
-        {/* Rochers */}
-        {rocks.map((rock) => (
-          <Rock
-            key={rock.id}
-            rock={rock}
-            isHighlighted={target?.id === rock.id}
-          />
-        ))}
-
-        {/* Buissons de brindilles */}
-        {twigs.map((twig) => (
-          <Twig
-            key={twig.id}
-            twig={twig}
-            isHighlighted={target?.id === twig.id}
-          />
-        ))}
-
-        {/* Tas de petits galets */}
-        {pebbles.map((pbl) => (
-          <PebbleCluster
-            key={pbl.id}
-            pebble={pbl}
-            isHighlighted={target?.id === pbl.id}
-          />
-        ))}
-
-        {/* Lits de potager */}
-        {gardenBeds.map((bed) => (
-          <GardenBed
-            key={bed.id}
-            bed={bed}
-            isHighlighted={target?.id === bed.id}
-          />
-        ))}
-
-        {/* Sources d'eau */}
-        {waterSources.map((src) => (
-          <WaterSource
-            key={src.id}
-            node={src}
-            isHighlighted={target?.id === src.id}
-          />
-        ))}
-
-        {/* Joueur — z-index 10, pointerEvents="none" interne */}
+        {/* Joueur — au-dessus de tous les objets statiques */}
         <PlayerCharacter />
       </Animated.View>
 
-      {/* ── Overlay nuit (sous les contrôles, au-dessus du monde) ──
-          pointerEvents="none" : ne capte aucun toucher. */}
       <Animated.View
         pointerEvents="none"
         style={[styles.nightOverlay, { opacity: nightOpacity }]}
       />
 
-      {/* ── Overlay contrôles ──
-          pointerEvents="box-none" : le conteneur est transparent aux touches,
-          seuls les enfants (joystick + bouton) les reçoivent. */}
       <View style={styles.controlsOverlay} pointerEvents="box-none">
         <VirtualJoystick directionRef={directionRef} />
         <ActionButton target={target} />
@@ -182,8 +125,6 @@ export const GameScene: React.FC = () => {
     </View>
   );
 };
-
-// ─── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   scene: {
@@ -211,7 +152,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 30, 1)',
   },
-  // Overlay full-width en bas : joystick à gauche, bouton action à droite.
   controlsOverlay: {
     position: 'absolute',
     bottom: 24,

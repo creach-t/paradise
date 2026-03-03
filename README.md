@@ -19,7 +19,7 @@ Le joueur se déplace librement dans un **monde ouvert (800 × 1400 px)** via un
 
 **Contrôles :**
 - Joystick (bas-gauche) → déplacer le joueur
-- Bouton d'action (bas-droite) → interagir avec l'objet le plus proche (rayon 80 px)
+- Bouton d'action (bas-droite) → interagir avec l'objet le plus proche (rayon 25 px)
   - 🟢 Vert : objet accessible → récolter / planter / récolter
   - 🔵 Bleu : arroser un lit de potager (consomme 1 eau)
   - 🟠 Orange : outil requis non équipé ou ressource manquante
@@ -84,7 +84,7 @@ Paradise/
     ├── hooks/
     │   ├── useRespawn.ts             ← Respawn + pousse potager (tick 1 s)
     │   ├── usePlayerMovement.ts      ← Mouvement joueur (tick 62 ms)
-    │   ├── useNearestHarvestable.ts  ← Détection proximité (tick 150 ms, rayon 80 px)
+    │   ├── useNearestHarvestable.ts  ← Détection proximité (tick 150 ms, rayon 25 px)
     │   └── useDayNightCycle.ts       ← Cycle jour/nuit (tick 1 s, Animated.Value)
     ├── navigation/AppNavigator.tsx   ← Stack: MainMenu → Game / Craft / Inventory / Settings
     ├── screens/

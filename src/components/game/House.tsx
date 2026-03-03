@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
 
 interface HouseProps {
   x: number;
@@ -13,8 +13,11 @@ interface HouseProps {
 export const House: React.FC<HouseProps> = ({ x, y }) => {
   return (
     <View style={[styles.container, { left: x, top: y }]}>
-      <Text style={styles.emoji}>🏠</Text>
-      <Text style={styles.label}>Maison</Text>
+      <Image
+        source={require('../../../assets/house.png')}
+        style={styles.image}
+        resizeMode="contain"
+      />
     </View>
   );
 };
@@ -22,19 +25,13 @@ export const House: React.FC<HouseProps> = ({ x, y }) => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
+    width: 80,
+    height: 80,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  emoji: {
-    fontSize: 56,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 3 },
-    textShadowRadius: 4,
-  },
-  label: {
-    fontSize: 11,
-    color: '#3a2010',
-    fontWeight: '700',
-    marginTop: -2,
-    letterSpacing: 0.5,
+  image: {
+    width: '100%',
+    height: '100%',
   },
 });

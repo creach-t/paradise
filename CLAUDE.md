@@ -40,7 +40,7 @@ Deux stores séparés, tous deux persistés :
 L'utilisateur contrôle le **joueur** (joystick), pas les objets du monde directement.
 
 - Déplacement : `VirtualJoystick` → `directionRef` (ref partagée, 0 re-render) → `usePlayerMovement` (tick 62 ms)
-- Détection : `useNearestHarvestable` poll à 150 ms → `HarvestTarget | null` (rayon 80 px)
+- Détection : `useNearestHarvestable` poll à 150 ms → `HarvestTarget | null` (rayon 25 px)
 - Interaction : `ActionButton` (bas-droite) déclenche `harvestXxx()` du gameStore
 - Les composants nœuds (`Tree`, `Rock`, `Twig`, `PebbleCluster`) sont des **`View` purs** — aucun `TouchableOpacity`
 
@@ -137,6 +137,10 @@ merge: (persistedState, currentState) => {
 - `pointerEvents="none"` — les touches passent au travers vers le joystick
 - Prop `isHighlighted?: boolean` → fond vert doux si cible d'interaction courante
 - Badge 🪓/⛏️ sur `Tree`/`Rock` si outil non équipé (feedback visuel permanent)
+- **Assets PNG** dans `assets/` : `tree.png` / `tree_cut.png`, `trio-tree.png` / `trio-tree_cut.png`, `rock.png` / `rock_mined.png`, `branch.png`, `little-rock.png`, `house.png`
+- **Variante `trio_`** : `Tree` choisit `trio-tree.png` si `id.startsWith('trio_')`, sinon `tree.png`
+- **État récolté** : `Twig`/`PebbleCluster` → `return null` (disparaît, pop à respawn) ; `Tree`/`Rock` → affichent le sprite coupé/miné
+- **Depth sort** dans `GameScene` : tous les nœuds + maison triés par Y croissant avant render → rendu 2.5D (bas de l'écran = devant)
 
 ## Recettes (data-driven)
 
@@ -162,7 +166,7 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 4. Ajouter les actions `harvest` + `respawn` dans `gameStore.ts` (avec `consumePlayerEnergy` + `addPlayerXp`)
 5. Enregistrer la demi-taille dans `SPRITE_HALF` (`useNearestHarvestable.ts`)
 6. Appeler `scan(gs.newNodes, 'new_type', requiredTool)` dans le hook
-7. Ajouter l'emoji + label dans `ActionButton.tsx`
+7. Ajouter l'asset image (ou emoji fallback) + label dans `ActionButton.tsx` (`NODE_IMAGE` / `NODE_EMOJI` / `ACTION_LABEL`)
 8. Monter le composant dans `GameScene.tsx` avec `isHighlighted={target?.id === node.id}`
 
 ### Ajouter des positions de nœuds dans le monde

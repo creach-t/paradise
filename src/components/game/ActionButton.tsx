@@ -1,18 +1,23 @@
 import React, { useCallback } from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text, Image, View, StyleSheet, ImageSourcePropType } from 'react-native';
 import type { HarvestTarget, HarvestableType } from '../../hooks/useNearestHarvestable';
 import { useGameStore } from '../../store/gameStore';
 import type { ToolType, SeedType } from '../../types';
 
-// ─── Métadonnées d'affichage — nœuds classiques ───────────────────────────────
+// ─── Assets des nœuds récoltables ─────────────────────────────────────────────
 
-const NODE_EMOJI: Record<HarvestableType, string> = {
-  twig:           '🌿',
-  pebble_cluster: '⚫',
-  tree:           '🌲',
-  rock:           '🪨',
-  garden_bed:     '🌱',
-  water_source:   '🌊',
+const NODE_IMAGE: Partial<Record<HarvestableType, ImageSourcePropType>> = {
+  twig:           require('../../../assets/branch.png'),
+  pebble_cluster: require('../../../assets/little-rock.png'),
+  tree:           require('../../../assets/tree.png'),
+  rock:           require('../../../assets/rock.png'),
+};
+
+// ─── Fallback emoji (potager, eau — pas d'asset dédié) ────────────────────────
+
+const NODE_EMOJI: Partial<Record<HarvestableType, string>> = {
+  garden_bed:   '🌱',
+  water_source: '🌊',
 };
 
 const ACTION_LABEL: Record<HarvestableType, string> = {
@@ -55,17 +60,6 @@ interface ActionButtonProps {
   target: HarvestTarget | null;
 }
 
-/**
- * Bouton d'interaction principal — positionné en bas à droite.
- *
- * ─── États visuels ──────────────────────────────────────────────────────────
- *  ✋ Idle      — aucun objet à portée      → gris/transparent
- *  🌿 Ready    — objet accessible           → vert, appuyable
- *  🪓 Locked   — outil manquant            → orange, non appuyable
- *  🌱 Plant    — potager vide + graine dispo → vert
- *  💧 Water    — potager en pousse + eau    → bleu
- *  🌾 Harvest  — potager prêt              → or
- */
 export const ActionButton: React.FC<ActionButtonProps> = ({ target }) => {
   const harvestTree   = useGameStore((s) => s.harvestTree);
   const harvestRock   = useGameStore((s) => s.harvestRock);
@@ -100,15 +94,16 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ target }) => {
   const hasTarget = target !== null;
   const canAct    = hasTarget && target.canHarvest;
 
-  let emoji = '✋';
+  let iconImage: ImageSourcePropType | null = null;
+  let iconEmoji = '✋';
   let label = 'Approche';
   let btnStyle: object[] = [styles.btn];
 
   if (!hasTarget) {
-    // Idle — pas de cible
+    // Idle
   } else if (target.type === 'garden_bed' && target.bedState) {
     const state = target.bedState;
-    emoji = state === 'empty' && target.seedToPlant
+    iconEmoji = state === 'empty' && target.seedToPlant
       ? SEED_EMOJI[target.seedToPlant]
       : BED_EMOJI[state];
     label = BED_LABEL[state];
@@ -119,7 +114,12 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ target }) => {
       label = state === 'empty' ? 'Graine req.' : 'Eau req.';
     }
   } else {
-    emoji = NODE_EMOJI[target.type];
+    const img = NODE_IMAGE[target.type];
+    if (img) {
+      iconImage = img;
+    } else {
+      iconEmoji = NODE_EMOJI[target.type] ?? '✋';
+    }
     if (canAct) {
       btnStyle = [styles.btn, styles.btnActive];
       label = ACTION_LABEL[target.type];
@@ -137,7 +137,13 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ target }) => {
       activeOpacity={0.7}
       accessibilityLabel={label}
     >
-      <Text style={styles.emoji}>{emoji}</Text>
+      <View style={styles.iconWrap}>
+        {iconImage ? (
+          <Image source={iconImage} style={styles.iconImage} resizeMode="contain" />
+        ) : (
+          <Text style={styles.emoji}>{iconEmoji}</Text>
+        )}
+      </View>
       <Text style={[styles.label, hasTarget && !canAct && styles.labelLocked]}>
         {label}
       </Text>
@@ -170,6 +176,16 @@ const styles = StyleSheet.create({
   btnLocked: {
     backgroundColor: 'rgba(55, 30, 5, 0.82)',
     borderColor: '#c07a1e',
+  },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconImage: {
+    width: 64,
+    height: 64,
   },
   emoji: {
     fontSize: 26,
