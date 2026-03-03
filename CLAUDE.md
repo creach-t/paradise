@@ -188,6 +188,19 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 - [ ] Atelier amélioré — forge débloque les recettes métal
 
 ### M4 — Progression craft
+
+#### Craft progressif par station
+- [ ] Ajouter un champ `station: CraftStation` sur chaque `CraftRecipe` dans `craftRecipes.ts`
+  - `CraftStation = 'hands' | 'workbench' | 'forge' | 'kitchen'`
+- [ ] **Niveau 1 — Sur soi (`hands`)** : recettes simples débloquées dès le départ (hache en bois, pioche en pierre) — accessibles depuis n'importe où dans le monde
+- [ ] **Niveau 2 — Atelier (`workbench`)** : le joueur doit être en proximité d'un établi placé dans le monde (`INTERACT_RANGE`) pour accéder aux recettes intermédiaires (planches, briques, outils améliorés)
+- [ ] **Niveau 3 — Forge (`forge`)** : structure débloquée par craft ou niveau — recettes métal (lingot, outil en acier)
+- [ ] **Niveau 4 — Cuisine (`kitchen`)** : feu de camp ou cuisinière — recettes de transformation alimentaire
+- [ ] `CraftScreen.tsx` : filtrer et afficher les recettes selon la station active (contexte d'ouverture : depuis le HUD = `hands` uniquement, depuis la proximité d'une station = recettes de cette station + hands)
+- [ ] Indicateur visuel sur les recettes verrouillées par station (icône de la station requise + label "Atelier requis")
+- [ ] Ajouter les stations comme nœuds interactifs dans le monde (même pattern que arbres/rochers : `position: absolute`, `isHighlighted`, `INTERACT_RANGE`)
+
+#### Reste de M4
 - [ ] Dégradation des outils — durabilité + réparation obligatoire
 - [ ] Arbre de craft étendu — minerai → métal → outils métal → ressources rares
 - [ ] Cuisine — feu de camp, recettes de transformation (fruit → jus, blé → farine → pain)
@@ -199,6 +212,42 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 - [ ] Saisons — ressources différentes selon la saison (printemps/été/automne/hiver)
 - [ ] Sons & musique — ambiance farming, effets de récolte
 - [ ] Monstres rares — spawn nocturne uniquement, passifs si non provoqués
+
+### M6 — Moteur monde (génération, hitboxes, layers)
+
+#### Système de layers
+- [ ] Définir l'ordre de rendu en 5 couches explicites dans `GameScene.tsx` :
+  - **Layer 0 — Sol** (`TerrainLayer`) : tuiles de fond (herbe, terre, sable, eau)
+  - **Layer 1 — Décorations** (`DecoLayer`) : herbes hautes, fleurs, cailloux visuels (pas d'interaction)
+  - **Layer 2 — Objets** (`ObjectLayer`) : nœuds récoltables actuels (arbres, rochers, buissons, galets) + structures (maison)
+  - **Layer 3 — Joueur** (`PlayerCharacter`) : z-index 10, déjà en place
+  - **Layer 4 — FX / Overlay** : particules de récolte, overlay jour/nuit, effets météo
+- [ ] Typer le système avec `LayerId = 0 | 1 | 2 | 3 | 4` et associer chaque composant monde à son layer
+
+#### Génération de map
+- [ ] Définir un format de chunk/tuile : `Tile = { type: TileType; variant: number }` dans `types/index.ts`
+- [ ] `TileType` : `'grass' | 'dirt' | 'sand' | 'water' | 'stone_floor'`
+- [ ] Générateur procédural (`utils/mapGen.ts`) : bruit de Perlin ou Simplex 2D → grille `WORLD_W/TILE_SIZE × WORLD_H/TILE_SIZE`
+  - Utiliser une graine (`seed`) stockée dans `gameStore` pour reproductibilité (sauvegarde stable)
+  - Palette de biomes : prairie centrale, lisière rocheuse (nord/est), plage (sud), forêt dense (ouest)
+- [ ] `TerrainLayer` : affiche la grille de tuiles via `FlatList` horizontale ou `View` grid avec `position: absolute` par tuile
+  - Taille de tuile conseillée : `TILE_SIZE = 40` (20×35 tuiles sur WORLD_W×WORLD_H)
+- [ ] Placement procédural des nœuds : `spawnNodes(seed, biome)` remplace les tableaux statiques `INITIAL_TREES` / `INITIAL_ROCKS` etc.
+  - Respect des contraintes : pas de spawn sur eau, pas de chevauchement, densité par biome
+  - Compatible avec le système de `merge` Zustand (IDs stables basés sur seed + index)
+
+#### Hitboxes & collisions joueur
+- [ ] Définir `CollisionRect = { x: number; y: number; w: number; h: number }` dans `types/index.ts`
+- [ ] Table de hitboxes statiques par type de nœud dans `constants/hitboxes.ts` :
+  - `Tree` : `{ w: 36, h: 48, offsetY: -16 }` (tronc, pas le feuillage)
+  - `Rock` : `{ w: 32, h: 28, offsetY: 0 }`
+  - `House` : `{ w: 80, h: 60, offsetY: 10 }`
+  - Tuile `water` / `stone_floor` : toute la tuile bloquante ou glissante
+- [ ] Hook `useCollision.ts` : appelé dans `usePlayerMovement` avant d'appliquer le déplacement
+  - Pattern : tester `nextX/nextY` contre la liste des `CollisionRect` actifs → bloquer ou ajuster
+  - Ne reconstruire la liste des rects actifs que quand `trees/rocks` changent (memo/ref stable)
+  - Périmètre initial : bloquer arbres + rochers + maison + tuiles eau
+- [ ] Hitbox de récolte distincte de la hitbox de collision (interaction = `INTERACT_RANGE 80px` centre-à-centre, déjà en place — ne pas confondre)
 
 ## Points d'attention
 

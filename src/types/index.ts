@@ -9,14 +9,28 @@
  *  wood    (bois)     → hache en bois requise, depuis les arbres
  *  stone   (pierre)   → pioche requise, depuis les rochers
  *  plank / brick      → ressources craftées
+ *  water              → collectée à la source d'eau (puits/mare)
+ *  berry/grain/mushroom → récoltés sur le potager (M2)
+ *  berry_seed/grain_seed/mushroom_seed → graines à planter
+ *  compost / fertilizer → craftés depuis les brindilles / compost
  */
 export interface ResourceInventory {
-  branch: number;  // Brindille — collectée à la main sur les buissons
-  pebble: number;  // Galet     — collecté à la main sur les tas de galets
-  wood: number;    // Bois      — nécessite hache en bois
-  stone: number;   // Pierre    — nécessite pioche en pierre
-  plank: number;   // Planche   — craftée (3 bois → 2 planches)
-  brick: number;   // Brique    — craftée (3 pierres → 1 brique)
+  branch: number;        // Brindille — collectée à la main sur les buissons
+  pebble: number;        // Galet     — collecté à la main sur les tas de galets
+  wood: number;          // Bois      — nécessite hache en bois
+  stone: number;         // Pierre    — nécessite pioche en pierre
+  plank: number;         // Planche   — craftée (3 bois → 2 planches)
+  brick: number;         // Brique    — craftée (3 pierres → 1 brique)
+  // ── M2 Farming ──────────────────────────────────────────────────────────────
+  water: number;         // Eau       — collectée à la source d'eau
+  berry: number;         // Baie      — récoltée sur le potager (graine de baie)
+  grain: number;         // Céréale   — récoltée sur le potager (graine de céréale)
+  mushroom: number;      // Champignon — récolté sur le potager (graine de champignon)
+  berry_seed: number;    // Graine de baie      — plantable sur le potager
+  grain_seed: number;    // Graine de céréale   — plantable sur le potager
+  mushroom_seed: number; // Graine de champignon — plantable sur le potager
+  compost: number;       // Compost   — crafté depuis les brindilles
+  fertilizer: number;    // Engrais   — crafté depuis le compost
 }
 
 export type ResourceType = keyof ResourceInventory;
@@ -58,6 +72,32 @@ export interface TwigNode extends HarvestableNode {
 /** Tas de petits galets — récolté à la main (sans outil). */
 export interface PebbleNode extends HarvestableNode {
   type: 'pebble_cluster';
+}
+
+// ─── M2 Farming — nouveaux nœuds ─────────────────────────────────────────────
+
+/** Types de graines plantables sur le potager. */
+export type SeedType = 'berry_seed' | 'grain_seed' | 'mushroom_seed';
+
+/** États d'un lit de potager. */
+export type GardenBedState = 'empty' | 'growing' | 'ready';
+
+/**
+ * Lit de potager — fixe dans le monde.
+ * États : empty → (planter) → growing → (readyAt atteint) → ready → (récolter) → empty.
+ * isHarvested n'est pas utilisé pour les jardins (on utilise `state`).
+ */
+export interface GardenBedNode extends HarvestableNode {
+  type: 'gardenBed';
+  state: GardenBedState;
+  seedType: SeedType | null;
+  readyAt: number | null; // timestamp ms où la culture est prête
+  wateredCount: number;   // nombre d'arrosages effectués sur cette pousse
+}
+
+/** Source d'eau (mare / puits) — nœud semi-permanent avec cooldown court. */
+export interface WaterSourceNode extends HarvestableNode {
+  type: 'waterSource';
 }
 
 // ─── Joueur ───────────────────────────────────────────────────────────────────

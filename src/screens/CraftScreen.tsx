@@ -17,21 +17,39 @@ import type { CraftRecipe, ResourceInventory, ToolType } from '../types';
 // ─── Métadonnées d'affichage ───────────────────────────────────────────────────
 
 const RESOURCE_EMOJI: Record<keyof ResourceInventory, string> = {
-  branch: '🌿',
-  pebble: '⚫',
-  wood:   '🪵',
-  stone:  '🪨',
-  plank:  '📋',
-  brick:  '🧱',
+  branch:        '🌿',
+  pebble:        '⚫',
+  wood:          '🪵',
+  stone:         '🪨',
+  plank:         '📋',
+  brick:         '🧱',
+  water:         '💧',
+  berry:         '🍓',
+  grain:         '🌾',
+  mushroom:      '🍄',
+  berry_seed:    '🌱',
+  grain_seed:    '🌾',
+  mushroom_seed: '🍄',
+  compost:       '♻️',
+  fertilizer:    '🌿',
 };
 
 const RESOURCE_LABEL: Record<keyof ResourceInventory, string> = {
-  branch: 'Brindille',
-  pebble: 'Galet',
-  wood:   'Bois',
-  stone:  'Pierre',
-  plank:  'Planche',
-  brick:  'Brique',
+  branch:        'Brindille',
+  pebble:        'Galet',
+  wood:          'Bois',
+  stone:         'Pierre',
+  plank:         'Planche',
+  brick:         'Brique',
+  water:         'Eau',
+  berry:         'Baie',
+  grain:         'Céréale',
+  mushroom:      'Champignon',
+  berry_seed:    'Graine de baie',
+  grain_seed:    'Graine de céréale',
+  mushroom_seed: 'Graine de champignon',
+  compost:       'Compost',
+  fertilizer:    'Engrais',
 };
 
 const TOOL_META: Record<ToolType, { emoji: string; description: string }> = {

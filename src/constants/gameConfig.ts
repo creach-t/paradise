@@ -1,4 +1,4 @@
-import { TreeNode, RockNode, TwigNode, PebbleNode } from '../types';
+import { TreeNode, RockNode, TwigNode, PebbleNode, GardenBedNode, WaterSourceNode, SeedType } from '../types';
 
 // ─── Dimensions du monde ──────────────────────────────────────────────────────
 
@@ -53,7 +53,36 @@ export const GAME_CONFIG = {
   XP_TREE: 15,
   /** XP gagnée en minant un rocher. */
   XP_ROCK: 15,
+  /** XP gagnée en récoltant une culture du potager. */
+  XP_GARDEN_HARVEST: 10,
+
+  // ── Potager (M2) ──────────────────────────────────────────────────────────
+  /** Énergie consommée pour planter / arroser / récolter sur le potager. */
+  HARVEST_ENERGY_GARDEN: 1,
+  /** Réduction du temps de pousse par arrosage (ms). */
+  WATERED_REDUCTION_MS: 15_000,
+  /** Cooldown de la source d'eau (ms). */
+  WATER_SOURCE_RESPAWN_DELAY: 10_000,
+  /** Eau collectée par interaction avec la source. */
+  WATER_PER_TAP: 2,
 } as const;
+
+// ─── Temps de pousse par graine (ms) ──────────────────────────────────────────
+
+export const GROWTH_BASE_MS: Record<SeedType, number> = {
+  berry_seed:    30_000, // 30 s — pousse rapide
+  grain_seed:    60_000, // 60 s — pousse moyenne
+  mushroom_seed: 90_000, // 90 s — pousse lente mais rentable
+};
+
+// ─── Rendement par graine ──────────────────────────────────────────────────────
+// La récolte retourne toujours 1 graine + N ressources du type cultivé.
+
+export const CROP_YIELD: Record<SeedType, { resource: 'berry' | 'grain' | 'mushroom'; amount: number }> = {
+  berry_seed:    { resource: 'berry',    amount: 3 },
+  grain_seed:    { resource: 'grain',    amount: 2 },
+  mushroom_seed: { resource: 'mushroom', amount: 1 },
+};
 
 // ─── Disposition initiale du monde ────────────────────────────────────────────
 //
@@ -67,10 +96,12 @@ export const GAME_CONFIG = {
 // │                        🏠 maison                            │
 // └──────────────────────────────────────────────────────────────┘
 
-type InitialTree   = Pick<TreeNode,   'id' | 'x' | 'y' | 'type'>;
-type InitialRock   = Pick<RockNode,   'id' | 'x' | 'y' | 'type'>;
-type InitialTwig   = Pick<TwigNode,   'id' | 'x' | 'y' | 'type'>;
-type InitialPebble = Pick<PebbleNode, 'id' | 'x' | 'y' | 'type'>;
+type InitialTree        = Pick<TreeNode,        'id' | 'x' | 'y' | 'type'>;
+type InitialRock        = Pick<RockNode,        'id' | 'x' | 'y' | 'type'>;
+type InitialTwig        = Pick<TwigNode,        'id' | 'x' | 'y' | 'type'>;
+type InitialPebble      = Pick<PebbleNode,      'id' | 'x' | 'y' | 'type'>;
+type InitialGardenBed   = Pick<GardenBedNode,   'id' | 'x' | 'y' | 'type'>;
+type InitialWaterSource = Pick<WaterSourceNode, 'id' | 'x' | 'y' | 'type'>;
 
 // ─── Forêt dense (cluster haut-gauche) ────────────────────────────────────────
 // Arbres espacés de ~38px centre-à-centre : chevauchement visuel intentionnel.
@@ -158,4 +189,20 @@ export const INITIAL_PEBBLES: InitialPebble[] = [
   { id: 'pbl_4', type: 'pebble_cluster', x: 455, y: 380 },
   { id: 'pbl_5', type: 'pebble_cluster', x: 500, y: 460 },
   { id: 'pbl_6', type: 'pebble_cluster', x: 540, y: 340 },
+];
+
+// ─── Lits de potager (M2) — à droite de la maison (HOUSE_X=155, HOUSE_Y=370) ──
+// 4 lits en grille 2×2, espacés de 54 px (sprite 48 px + 6 px de marge).
+
+export const INITIAL_GARDEN_BEDS: InitialGardenBed[] = [
+  { id: 'gbed_1', type: 'gardenBed', x: 255, y: 355 },
+  { id: 'gbed_2', type: 'gardenBed', x: 309, y: 355 },
+  { id: 'gbed_3', type: 'gardenBed', x: 255, y: 409 },
+  { id: 'gbed_4', type: 'gardenBed', x: 309, y: 409 },
+];
+
+// ─── Source d'eau (M2) — mare à l'est ─────────────────────────────────────────
+
+export const INITIAL_WATER_SOURCES: InitialWaterSource[] = [
+  { id: 'wsrc_1', type: 'waterSource', x: 490, y: 470 },
 ];

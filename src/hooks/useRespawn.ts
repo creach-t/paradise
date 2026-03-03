@@ -18,8 +18,9 @@ export function useRespawn(): void {
   useEffect(() => {
     const interval = setInterval(() => {
       const {
-        trees, rocks, twigs, pebbles,
+        trees, rocks, twigs, pebbles, gardenBeds, waterSources,
         respawnTree, respawnRock, respawnTwig, respawnPebble,
+        respawnWaterSource, advanceGardenBed,
       } = useGameStore.getState();
       const now = Date.now();
 
@@ -41,6 +42,18 @@ export function useRespawn(): void {
       for (const pbl of pebbles) {
         if (pbl.isHarvested && pbl.respawnAt !== null && now >= pbl.respawnAt) {
           respawnPebble(pbl.id);
+        }
+      }
+      // ── Potager : pousse → prête ──────────────────────────────────────────
+      for (const bed of gardenBeds) {
+        if (bed.state === 'growing' && bed.readyAt !== null && now >= bed.readyAt) {
+          advanceGardenBed(bed.id);
+        }
+      }
+      // ── Source d'eau : cooldown ───────────────────────────────────────────
+      for (const src of waterSources) {
+        if (src.isHarvested && src.respawnAt !== null && now >= src.respawnAt) {
+          respawnWaterSource(src.id);
         }
       }
     }, GAME_CONFIG.RESPAWN_TICK);

@@ -58,6 +58,61 @@ const RESOURCE_META: Record<keyof ResourceInventory, ResourceMeta> = {
     description: 'Fabriquée à partir de 3 pierres.',
     color: '#c0552a',
   },
+  // ── M2 Farming ──────────────────────────────────────────────────────────────
+  water: {
+    emoji: '💧',
+    label: 'Eau',
+    description: "Collectée à la source d'eau. Sert à arroser le potager.",
+    color: '#2d7ab8',
+  },
+  berry: {
+    emoji: '🍓',
+    label: 'Baie',
+    description: 'Récoltée sur le potager depuis une graine de baie (30 s).',
+    color: '#c0304a',
+  },
+  grain: {
+    emoji: '🌾',
+    label: 'Céréale',
+    description: 'Récoltée sur le potager depuis une graine de céréale (60 s).',
+    color: '#c8a830',
+  },
+  mushroom: {
+    emoji: '🍄',
+    label: 'Champignon',
+    description: 'Récolté sur le potager depuis une graine de champignon (90 s).',
+    color: '#8b3a1e',
+  },
+  berry_seed: {
+    emoji: '🌱',
+    label: 'Graine de baie',
+    description: 'Plantable sur le potager. Produit 3 baies en 30 s.',
+    color: '#4a8a3c',
+  },
+  grain_seed: {
+    emoji: '🌾',
+    label: 'Graine de céréale',
+    description: 'Plantable sur le potager. Produit 2 céréales en 60 s.',
+    color: '#8a7a2a',
+  },
+  mushroom_seed: {
+    emoji: '🍄',
+    label: 'Graine de champignon',
+    description: 'Plantable sur le potager. Produit 1 champignon en 90 s.',
+    color: '#6b3a1e',
+  },
+  compost: {
+    emoji: '♻️',
+    label: 'Compost',
+    description: "Crafté depuis 4 brindilles. Sert à fabriquer l'engrais.",
+    color: '#5a4a2a',
+  },
+  fertilizer: {
+    emoji: '🌿',
+    label: 'Engrais',
+    description: 'Crafté depuis 2 composts. Accélère la pousse (à venir).',
+    color: '#3a7a2a',
+  },
 };
 
 // ─── Composant carte de ressource ─────────────────────────────────────────────
