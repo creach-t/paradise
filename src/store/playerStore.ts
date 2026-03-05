@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Dimensions } from 'react-native';
 import { PlayerState, PlayerStats, ToolType } from '../types';
+import { applyXpGain, consumeEnergy as domainConsumeEnergy, regenEnergy as domainRegenEnergy } from '../domain/player';
 
 // ─── État initial ──────────────────────────────────────────────────────────────
 
@@ -90,49 +91,22 @@ export const usePlayerStore = create<PlayerStore>()(
       },
 
       consumeEnergy: (amount) => {
-        const { stats } = get().player;
-        if (stats.energy < amount) return false;
-
-        set((state) => ({
-          player: {
-            ...state.player,
-            stats: { ...state.player.stats, energy: state.player.stats.energy - amount },
-          },
-        }));
+        const nextStats = domainConsumeEnergy(get().player.stats, amount);
+        if (!nextStats) return false;
+        set((state) => ({ player: { ...state.player, stats: nextStats } }));
         return true;
       },
 
       regenEnergy: (amount) => {
-        set((state) => {
-          const { stats } = state.player;
-          return {
-            player: {
-              ...state.player,
-              stats: {
-                ...stats,
-                energy: Math.min(stats.maxEnergy, stats.energy + amount),
-              },
-            },
-          };
-        });
+        set((state) => ({
+          player: { ...state.player, stats: domainRegenEnergy(state.player.stats, amount) },
+        }));
       },
 
       addXp: (amount) => {
-        set((state) => {
-          const s = { ...state.player.stats };
-          s.xp += amount;
-
-          // Level-up en cascade (au cas où un gros gain dépasse plusieurs niveaux).
-          while (s.xp >= s.xpToNextLevel) {
-            s.xp -= s.xpToNextLevel;
-            s.level += 1;
-            s.xpToNextLevel = Math.floor(s.xpToNextLevel * 1.6);
-            s.maxEnergy += 10;
-            s.energy = s.maxEnergy; // Régen complète au level-up
-          }
-
-          return { player: { ...state.player, stats: s } };
-        });
+        set((state) => ({
+          player: { ...state.player, stats: applyXpGain(state.player.stats, amount) },
+        }));
       },
 
       equipTool: (tool) => {

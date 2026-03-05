@@ -75,11 +75,15 @@ Paradise/
 ├── app.json / eas.json               ← Config Expo + profils build
 └── src/
     ├── types/index.ts                ← Tous les types partagés
+    ├── domain/                       ← ★ Logique pure TS — 0 dépendances React/Zustand
+    │   ├── player.ts                 ← applyXpGain · consumeEnergy · regenEnergy
+    │   └── harvest.ts                ← harvestTree/Rock/Twig/Pebble/Water → HarvestResult
     ├── constants/
-    │   ├── gameConfig.ts             ← Timings, XP, énergie, WORLD_W/H, positions monde
+    │   ├── balance.ts                ← ★ Tous les chiffres de gameplay (coûts énergie, XP, timings, jour/nuit)
+    │   ├── gameConfig.ts             ← WORLD_W · WORLD_H · positions initiales des nœuds
     │   └── craftRecipes.ts           ← Recettes (data-driven)
     ├── store/
-    │   ├── gameStore.ts              ← Monde : ressources, outils, nœuds, potager
+    │   ├── gameStore.ts              ← Orchestrateur : appelle domain/ → applique HarvestResult
     │   └── playerStore.ts            ← Joueur : position, énergie, niveau, XP, outil équipé
     ├── hooks/
     │   ├── useRespawn.ts             ← Respawn + pousse potager (tick 1 s)
@@ -105,6 +109,15 @@ Paradise/
         │   └── VirtualJoystick.tsx   ← Joystick (PanResponder, 0 re-render)
         └── hud/HUD.tsx               ← ☰ menu + barre énergie + niveau + slot outil
 ```
+
+**Règle d'import stricte :**
+```
+components → store → domain → types
+              ↓
+          playerStore  ←  gameStore  (sens unique, pas de cycle)
+```
+
+`domain/` n'importe jamais depuis `store/`, `hooks/` ou `components/`.
 
 ## Démarrage rapide
 

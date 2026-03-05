@@ -22,11 +22,18 @@ import {
   INITIAL_PEBBLES,
   INITIAL_GARDEN_BEDS,
   INITIAL_WATER_SOURCES,
-  GAME_CONFIG,
-  GROWTH_BASE_MS,
-  CROP_YIELD,
 } from '../constants/gameConfig';
+import { BALANCE, GROWTH_BASE_MS, CROP_YIELD } from '../constants/balance';
 import { CRAFT_RECIPES } from '../constants/craftRecipes';
+import { usePlayerStore } from './playerStore';
+import {
+  harvestTree  as domainHarvestTree,
+  harvestRock  as domainHarvestRock,
+  harvestTwig  as domainHarvestTwig,
+  harvestPebble as domainHarvestPebble,
+  harvestWater as domainHarvestWater,
+} from '../domain/harvest';
+import { applyXpGain, consumeEnergy as domainConsumeEnergy } from '../domain/player';
 
 // ─── Types du store ────────────────────────────────────────────────────────────
 
@@ -134,39 +141,21 @@ const initialState: GameState = {
   waterSources: buildNodes(INITIAL_WATER_SOURCES)  as WaterSourceNode[],
 };
 
-// ─── Helpers inter-stores ──────────────────────────────────────────────────────
-//
-// Require dynamique pour éviter le cycle d'import circulaire gameStore ↔ playerStore.
+// ─── Helpers locaux ────────────────────────────────────────────────────────────
 
 /**
- * Lit l'outil équipé depuis playerStore via getState().
+ * Applique un delta de ressources (valeurs positives ou négatives) sur un inventaire.
+ * Utilisé par les actions de récolte pour fusionner le résultat domain avec l'état courant.
  */
-function getEquippedTool(): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { usePlayerStore } = require('./playerStore') as typeof import('./playerStore');
-  return usePlayerStore.getState().equippedTool;
+function applyResourceDelta(
+  resources: ResourceInventory,
+  delta: Partial<ResourceInventory>,
+): ResourceInventory {
+  const next = { ...resources };
+  (Object.entries(delta) as [keyof ResourceInventory, number][])
+    .forEach(([key, amount]) => { next[key] = next[key] + amount; });
+  return next;
 }
-
-/**
- * Consomme de l'énergie du joueur.
- * @returns false si l'énergie est insuffisante (bloquer la récolte).
- */
-function consumePlayerEnergy(amount: number): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { usePlayerStore } = require('./playerStore') as typeof import('./playerStore');
-  return usePlayerStore.getState().consumeEnergy(amount);
-}
-
-/**
- * Ajoute de l'XP au joueur (gère le level-up automatiquement).
- */
-function addPlayerXp(amount: number): void {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { usePlayerStore } = require('./playerStore') as typeof import('./playerStore');
-  usePlayerStore.getState().addXp(amount);
-}
-
-// ─── Helpers craft ─────────────────────────────────────────────────────────────
 
 function canAfford(
   resources: ResourceInventory,
@@ -186,87 +175,73 @@ export const useGameStore = create<GameStore>()(
       // ── Récolte arbres ────────────────────────────────────────────────────
 
       harvestTree: (id) => {
-        const tree = get().trees.find((t) => t.id === id);
-        if (!tree || tree.isHarvested) return;
-        if (getEquippedTool() !== 'wooden_axe') return;           // outil requis
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_TOOL)) return; // énergie insuffisante
+        const node = get().trees.find((t) => t.id === id);
+        if (!node) return;
+        const { player, equippedTool } = usePlayerStore.getState();
+        const result = domainHarvestTree(node, player.stats, equippedTool);
+        if (!result.ok) return;
 
         set((state) => ({
-          resources: {
-            ...state.resources,
-            wood: state.resources.wood + GAME_CONFIG.WOOD_PER_TAP,
-          },
+          resources: applyResourceDelta(state.resources, result.resourceDelta),
           trees: state.trees.map((t) =>
-            t.id === id
-              ? { ...t, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.TREE_RESPAWN_DELAY }
-              : t,
+            t.id === id ? { ...t, isHarvested: true, respawnAt: Date.now() + result.respawnDelay } : t,
           ),
         }));
-        addPlayerXp(GAME_CONFIG.XP_TREE);
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: result.nextStats } }));
       },
 
       // ── Récolte rochers ───────────────────────────────────────────────────
 
       harvestRock: (id) => {
-        const rock = get().rocks.find((r) => r.id === id);
-        if (!rock || rock.isHarvested) return;
-        if (getEquippedTool() !== 'stone_pickaxe') return;        // outil requis
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_TOOL)) return; // énergie insuffisante
+        const node = get().rocks.find((r) => r.id === id);
+        if (!node) return;
+        const { player, equippedTool } = usePlayerStore.getState();
+        const result = domainHarvestRock(node, player.stats, equippedTool);
+        if (!result.ok) return;
 
         set((state) => ({
-          resources: {
-            ...state.resources,
-            stone: state.resources.stone + GAME_CONFIG.STONE_PER_TAP,
-          },
+          resources: applyResourceDelta(state.resources, result.resourceDelta),
           rocks: state.rocks.map((r) =>
-            r.id === id
-              ? { ...r, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.ROCK_RESPAWN_DELAY }
-              : r,
+            r.id === id ? { ...r, isHarvested: true, respawnAt: Date.now() + result.respawnDelay } : r,
           ),
         }));
-        addPlayerXp(GAME_CONFIG.XP_ROCK);
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: result.nextStats } }));
       },
 
       // ── Récolte buissons (main libre) ─────────────────────────────────────
 
       harvestTwig: (id) => {
-        const twig = get().twigs.find((t) => t.id === id);
-        if (!twig || twig.isHarvested) return;
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_HAND)) return; // énergie insuffisante
+        const node = get().twigs.find((t) => t.id === id);
+        if (!node) return;
+        const { player } = usePlayerStore.getState();
+        const result = domainHarvestTwig(node, player.stats);
+        if (!result.ok) return;
 
         set((state) => ({
-          resources: {
-            ...state.resources,
-            branch: state.resources.branch + GAME_CONFIG.BRANCH_PER_TAP,
-          },
+          resources: applyResourceDelta(state.resources, result.resourceDelta),
           twigs: state.twigs.map((t) =>
-            t.id === id
-              ? { ...t, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.TWIG_RESPAWN_DELAY }
-              : t,
+            t.id === id ? { ...t, isHarvested: true, respawnAt: Date.now() + result.respawnDelay } : t,
           ),
         }));
-        addPlayerXp(GAME_CONFIG.XP_TWIG);
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: result.nextStats } }));
       },
 
       // ── Récolte galets (main libre) ───────────────────────────────────────
 
       harvestPebble: (id) => {
-        const pbl = get().pebbles.find((p) => p.id === id);
-        if (!pbl || pbl.isHarvested) return;
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_HAND)) return; // énergie insuffisante
+        const node = get().pebbles.find((p) => p.id === id);
+        if (!node) return;
+        const { player } = usePlayerStore.getState();
+        const result = domainHarvestPebble(node, player.stats);
+        if (!result.ok) return;
 
         set((state) => ({
-          resources: {
-            ...state.resources,
-            pebble: state.resources.pebble + GAME_CONFIG.PEBBLE_PER_TAP,
-          },
+          resources: applyResourceDelta(state.resources, result.resourceDelta),
           pebbles: state.pebbles.map((p) =>
-            p.id === id
-              ? { ...p, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.PEBBLE_RESPAWN_DELAY }
-              : p,
+            p.id === id ? { ...p, isHarvested: true, respawnAt: Date.now() + result.respawnDelay } : p,
           ),
         }));
-        addPlayerXp(GAME_CONFIG.XP_PEBBLE);
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: result.nextStats } }));
       },
 
       // ── Respawns ──────────────────────────────────────────────────────────
@@ -292,8 +267,12 @@ export const useGameStore = create<GameStore>()(
         const bed = get().gardenBeds.find((b) => b.id === bedId);
         if (!bed || bed.state !== 'empty') return;
         if (get().resources[seedType] <= 0) return;
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_GARDEN)) return;
 
+        const { player } = usePlayerStore.getState();
+        const nextStats = domainConsumeEnergy(player.stats, BALANCE.HARVEST_ENERGY_GARDEN);
+        if (!nextStats) return;
+
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: nextStats } }));
         set((state) => ({
           resources: { ...state.resources, [seedType]: state.resources[seedType] - 1 },
           gardenBeds: state.gardenBeds.map((b) =>
@@ -308,13 +287,17 @@ export const useGameStore = create<GameStore>()(
         const bed = get().gardenBeds.find((b) => b.id === bedId);
         if (!bed || bed.state !== 'growing' || bed.readyAt === null) return;
         if (get().resources.water <= 0) return;
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_GARDEN)) return;
 
+        const { player } = usePlayerStore.getState();
+        const nextStats = domainConsumeEnergy(player.stats, BALANCE.HARVEST_ENERGY_GARDEN);
+        if (!nextStats) return;
+
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: nextStats } }));
         set((state) => ({
           resources: { ...state.resources, water: state.resources.water - 1 },
           gardenBeds: state.gardenBeds.map((b) => {
             if (b.id !== bedId || b.readyAt === null) return b;
-            const newReadyAt = Math.max(Date.now() + 1_000, b.readyAt - GAME_CONFIG.WATERED_REDUCTION_MS);
+            const newReadyAt = Math.max(Date.now() + 1_000, b.readyAt - BALANCE.WATERED_REDUCTION_MS);
             return { ...b, readyAt: newReadyAt, wateredCount: b.wateredCount + 1 };
           }),
         }));
@@ -323,7 +306,11 @@ export const useGameStore = create<GameStore>()(
       harvestCrop: (bedId) => {
         const bed = get().gardenBeds.find((b) => b.id === bedId);
         if (!bed || bed.state !== 'ready' || bed.seedType === null) return;
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_GARDEN)) return;
+
+        const { player } = usePlayerStore.getState();
+        const statsAfterEnergy = domainConsumeEnergy(player.stats, BALANCE.HARVEST_ENERGY_GARDEN);
+        if (!statsAfterEnergy) return;
+        const nextStats = applyXpGain(statsAfterEnergy, BALANCE.XP_GARDEN_HARVEST);
 
         const { resource, amount } = CROP_YIELD[bed.seedType];
         const seedType = bed.seedType;
@@ -340,7 +327,7 @@ export const useGameStore = create<GameStore>()(
               : b,
           ),
         }));
-        addPlayerXp(GAME_CONFIG.XP_GARDEN_HARVEST);
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: nextStats } }));
       },
 
       advanceGardenBed: (bedId) =>
@@ -351,18 +338,19 @@ export const useGameStore = create<GameStore>()(
         })),
 
       harvestWater: (sourceId) => {
-        const src = get().waterSources.find((w) => w.id === sourceId);
-        if (!src || src.isHarvested) return;
-        if (!consumePlayerEnergy(GAME_CONFIG.HARVEST_ENERGY_HAND)) return;
+        const node = get().waterSources.find((w) => w.id === sourceId);
+        if (!node) return;
+        const { player } = usePlayerStore.getState();
+        const result = domainHarvestWater(node, player.stats);
+        if (!result.ok) return;
 
         set((state) => ({
-          resources: { ...state.resources, water: state.resources.water + GAME_CONFIG.WATER_PER_TAP },
+          resources: applyResourceDelta(state.resources, result.resourceDelta),
           waterSources: state.waterSources.map((w) =>
-            w.id === sourceId
-              ? { ...w, isHarvested: true, respawnAt: Date.now() + GAME_CONFIG.WATER_SOURCE_RESPAWN_DELAY }
-              : w,
+            w.id === sourceId ? { ...w, isHarvested: true, respawnAt: Date.now() + result.respawnDelay } : w,
           ),
         }));
+        usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: result.nextStats } }));
       },
 
       // ── Craft ─────────────────────────────────────────────────────────────

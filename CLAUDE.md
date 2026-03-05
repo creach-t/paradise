@@ -14,6 +14,19 @@ Ce fichier donne à Claude le contexte nécessaire pour contribuer efficacement 
 - **TypeScript strict**
 - **Build APK** : `eas build --platform android --profile preview`
 
+## Couche domaine (`src/domain/`)
+
+Fonctions TypeScript pures — **zéro dépendance** React, Expo ou Zustand. Testables en isolation.
+
+| Fichier | Contenu |
+|---------|---------|
+| `domain/player.ts` | `applyXpGain(stats, amount)`, `consumeEnergy(stats, cost)`, `regenEnergy(stats, amount)` |
+| `domain/harvest.ts` | `harvestTree/Rock/Twig/Pebble/Water(node, stats, equippedTool?)` → `HarvestResult` |
+
+`HarvestResult` = `{ ok: true, resourceDelta, respawnDelay, nextStats }` | `{ ok: false, reason }`.
+
+Les stores appellent ces fonctions puis appliquent le résultat — ils ne contiennent plus de logique métier.
+
 ## Architecture des stores
 
 Deux stores séparés, tous deux persistés :
@@ -23,7 +36,7 @@ Deux stores séparés, tous deux persistés :
 | `gameStore.ts` | `paradise-save` | Ressources, outils craftés, état du monde (arbres, rochers, buissons, galets) |
 | `playerStore.ts` | `paradise-player` | Position joueur, stats (énergie, niveau, XP), outil équipé |
 
-**Import circulaire gameStore ↔ playerStore** : résolu par `require()` dynamique dans les helpers `getEquippedTool()`, `consumePlayerEnergy()` et `addPlayerXp()` — ne jamais faire d'import statique entre ces deux fichiers.
+**Sens des imports** : `gameStore` → `playerStore` (import statique, sens unique). `playerStore` n'importe pas `gameStore`. Les anciens `require()` dynamiques ont été supprimés.
 
 ## Monde scrollable
 
@@ -46,8 +59,8 @@ L'utilisateur contrôle le **joueur** (joystick), pas les objets du monde direct
 
 ## Cycle jour/nuit
 
-- Hook `hooks/useDayNightCycle.ts` → retourne `Animated.Value` (opacité 0..`NIGHT_MAX_OPACITY`)
-- Constantes dans `gameConfig.ts` : `DAY_CYCLE_MS = 300_000` (5 min), `NIGHT_MAX_OPACITY = 0.62`
+- Hook `hooks/useDayNightCycle.ts` → retourne `Animated.Value` (opacité 0..`BALANCE.NIGHT_MAX_OPACITY`)
+- Constantes dans `constants/balance.ts` : `BALANCE.DAY_CYCLE_MS = 300_000` (5 min), `BALANCE.NIGHT_MAX_OPACITY = 0.62`
 - Formule : `(1 - cos(phase × 2π)) / 2 × MAX` — transition lisse sans palier
 - Tick 1 s, `setValue()` sans re-render React
 - Overlay `rgba(0, 0, 30, 1)` dans `GameScene.tsx`, entre WorldLayer et ControlsOverlay
@@ -100,15 +113,28 @@ useEffect(() => {
 ```
 
 ### Récolte + énergie + XP
-Chaque action `harvest` du gameStore :
-1. Vérifie que le nœud n'est pas déjà récolté
-2. Vérifie l'outil équipé (arbres/rochers)
-3. Appelle `consumePlayerEnergy(cost)` → retourne `false` si insuffisant → bloque la récolte
-4. Applique le harvest + démarre le timer de respawn
-5. Appelle `addPlayerXp(amount)` → level-up automatique si seuil atteint
 
-Coûts énergie : `HARVEST_ENERGY_HAND = 1` (brindilles, galets) · `HARVEST_ENERGY_TOOL = 2` (arbres, rochers)
-XP : `XP_TWIG = 5` · `XP_PEBBLE = 5` · `XP_TREE = 15` · `XP_ROCK = 15`
+Les actions `harvest` du gameStore sont des **orchestrateurs** — la logique est dans `domain/harvest.ts` :
+
+```typescript
+// Pattern dans gameStore
+harvestTree: (id) => {
+  const node = get().trees.find((t) => t.id === id);
+  if (!node) return;
+  const { player, equippedTool } = usePlayerStore.getState();
+  const result = domainHarvestTree(node, player.stats, equippedTool);
+  if (!result.ok) return;                          // wrong_tool | no_energy | already_harvested
+  set((s) => ({ resources: applyResourceDelta(s.resources, result.resourceDelta),
+                trees: s.trees.map(...respawnAt...) }));
+  usePlayerStore.setState((ps) => ({ player: { ...ps.player, stats: result.nextStats } }));
+},
+```
+
+`domain/harvest.ts` valide les préconditions, consomme l'énergie (`domain/player.ts`) et calcule l'XP.
+`domain/player.ts` expose `applyXpGain`, `consumeEnergy`, `regenEnergy` (fonctions pures, testables sans store).
+
+Coûts énergie : `BALANCE.HARVEST_ENERGY_HAND = 1` (brindilles, galets) · `BALANCE.HARVEST_ENERGY_TOOL = 2` (arbres, rochers)
+XP : `BALANCE.XP_TWIG = 5` · `BALANCE.XP_PEBBLE = 5` · `BALANCE.XP_TREE = 15` · `BALANCE.XP_ROCK = 15`
 
 ### Persist — migration des sauvegardes
 Le `merge` de `gameStore` gère deux niveaux de compatibilité ascendante :
@@ -161,13 +187,15 @@ Union discriminée : `ResourceRecipe (category: 'resource')` | `ToolRecipe (cate
 
 ### Ajouter un objet récoltable
 1. Créer le type dans `types/index.ts` (étend `HarvestableNode`)
-2. Ajouter les positions initiales dans `gameConfig.ts`
+2. Ajouter les positions initiales dans `gameConfig.ts` (`INITIAL_xxx`)
 3. Créer le composant dans `components/game/` — **`View` pur**, prop `isHighlighted`
-4. Ajouter les actions `harvest` + `respawn` dans `gameStore.ts` (avec `consumePlayerEnergy` + `addPlayerXp`)
-5. Enregistrer la demi-taille dans `SPRITE_HALF` (`useNearestHarvestable.ts`)
-6. Appeler `scan(gs.newNodes, 'new_type', requiredTool)` dans le hook
-7. Ajouter l'asset image (ou emoji fallback) + label dans `ActionButton.tsx` (`NODE_IMAGE` / `NODE_EMOJI` / `ACTION_LABEL`)
-8. Monter le composant dans `GameScene.tsx` avec `isHighlighted={target?.id === node.id}`
+4. Ajouter la fonction `harvestXxx(node, stats, equippedTool?)` dans `domain/harvest.ts` (appel `attempt(...)`)
+5. Ajouter les coûts/XP/délai dans `constants/balance.ts` (`BALANCE`)
+6. Ajouter les actions `harvestXxx` + `respawnXxx` dans `gameStore.ts` (pattern orchestrateur : appel domain → `set()` + `usePlayerStore.setState()`)
+7. Enregistrer la demi-taille dans `SPRITE_HALF` (`useNearestHarvestable.ts`)
+8. Appeler `scan(gs.newNodes, 'new_type', requiredTool)` dans le hook
+9. Ajouter l'asset image (ou emoji fallback) + label dans `ActionButton.tsx` (`NODE_IMAGE` / `NODE_EMOJI` / `ACTION_LABEL`)
+10. Monter le composant dans `GameScene.tsx` avec `isHighlighted={target?.id === node.id}`
 
 ### Ajouter des positions de nœuds dans le monde
 - Ajouter les entrées dans `INITIAL_TREES` / `INITIAL_ROCKS` / etc. (`gameConfig.ts`)

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { GAME_CONFIG } from '../constants/gameConfig';
+import { BALANCE } from '../constants/balance';
 
 /**
  * Hook de gestion des respawns.
@@ -56,7 +56,7 @@ export function useRespawn(): void {
           respawnWaterSource(src.id);
         }
       }
-    }, GAME_CONFIG.RESPAWN_TICK);
+    }, BALANCE.RESPAWN_TICK);
 
     return () => clearInterval(interval);
   }, []); // Stable : getState() lit toujours l'état courant sans s'abonner

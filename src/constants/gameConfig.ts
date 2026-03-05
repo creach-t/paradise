@@ -1,4 +1,4 @@
-import { TreeNode, RockNode, TwigNode, PebbleNode, GardenBedNode, WaterSourceNode, SeedType } from '../types';
+import { TreeNode, RockNode, TwigNode, PebbleNode, GardenBedNode, WaterSourceNode } from '../types';
 
 // ─── Dimensions du monde ──────────────────────────────────────────────────────
 
@@ -6,52 +6,6 @@ import { TreeNode, RockNode, TwigNode, PebbleNode, GardenBedNode, WaterSourceNod
 export const WORLD_W = 800;
 /** Hauteur totale du monde en pixels. */
 export const WORLD_H = 1400;
-
-// ─── Cycle jour/nuit ──────────────────────────────────────────────────────────
-
-/** Durée d'un cycle complet jour/nuit (ms). 5 min = 300 000 ms. */
-export const DAY_CYCLE_MS = 5 * 60 * 1000;
-/** Opacité max de l'overlay nocturne (0 = invisible, 1 = noir total). */
-export const NIGHT_MAX_OPACITY = 0.62;
-
-// ─── Timings ──────────────────────────────────────────────────────────────────
-
-export const GAME_CONFIG = {
-  TREE_RESPAWN_DELAY:         12_000,
-  ROCK_RESPAWN_DELAY:         18_000,
-  TWIG_RESPAWN_DELAY:          6_000,
-  PEBBLE_RESPAWN_DELAY:        8_000,
-  WOOD_PER_TAP:                    2,
-  STONE_PER_TAP:                   2,
-  BRANCH_PER_TAP:                  1,
-  PEBBLE_PER_TAP:                  1,
-  RESPAWN_TICK:                1_000,
-  HARVEST_ENERGY_HAND:             1,
-  HARVEST_ENERGY_TOOL:             2,
-  XP_TWIG:                         5,
-  XP_PEBBLE:                       5,
-  XP_TREE:                        15,
-  XP_ROCK:                        15,
-  XP_GARDEN_HARVEST:              10,
-  HARVEST_ENERGY_GARDEN:           1,
-  WATERED_REDUCTION_MS:       15_000,
-  WATER_SOURCE_RESPAWN_DELAY: 10_000,
-  WATER_PER_TAP:                   2,
-} as const;
-
-// ─── Temps de pousse par graine (ms) ──────────────────────────────────────────
-
-export const GROWTH_BASE_MS: Record<SeedType, number> = {
-  berry_seed:    30_000,
-  grain_seed:    60_000,
-  mushroom_seed: 90_000,
-};
-
-export const CROP_YIELD: Record<SeedType, { resource: 'berry' | 'grain' | 'mushroom'; amount: number }> = {
-  berry_seed:    { resource: 'berry',    amount: 3 },
-  grain_seed:    { resource: 'grain',    amount: 2 },
-  mushroom_seed: { resource: 'mushroom', amount: 1 },
-};
 
 // ─── Disposition initiale du monde ────────────────────────────────────────────
 //

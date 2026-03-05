@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
-import { DAY_CYCLE_MS, NIGHT_MAX_OPACITY } from '../constants/gameConfig';
+import { BALANCE } from '../constants/balance';
 
 /** Fréquence de mise à jour de l'overlay nuit (ms). */
 const TICK_MS = 1_000;
@@ -30,14 +30,14 @@ export function useDayNightCycle(): Animated.Value {
     let elapsed = 0;
 
     const id = setInterval(() => {
-      elapsed = (elapsed + TICK_MS) % DAY_CYCLE_MS;
-      const phase = elapsed / DAY_CYCLE_MS; // 0..1
-      const opacity = ((1 - Math.cos(phase * 2 * Math.PI)) / 2) * NIGHT_MAX_OPACITY;
+      elapsed = (elapsed + TICK_MS) % BALANCE.DAY_CYCLE_MS;
+      const phase = elapsed / BALANCE.DAY_CYCLE_MS; // 0..1
+      const opacity = ((1 - Math.cos(phase * 2 * Math.PI)) / 2) * BALANCE.NIGHT_MAX_OPACITY;
       nightOpacity.setValue(opacity);
     }, TICK_MS);
 
     return () => clearInterval(id);
-  }, []); // stable — DAY_CYCLE_MS est une constante
+  }, []); // stable — BALANCE.DAY_CYCLE_MS est une constante
 
   return nightOpacity;
 }
